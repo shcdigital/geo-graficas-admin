@@ -339,6 +339,9 @@ function quote(v){
   if(/[:#\[\]{},&*!|>'"]|\s/.test(s)) return `"${s.replace(/"/g,'\\"')}"`;
   return s;
 }
+function sQuote(v){
+  return `"${String(v).replace(/"/g,'\\"')}"`;
+}
 function listYaml(arr){
   return arr.length ? " "+JSON.stringify(arr.map(s=>String(s))) : " []";
 }
@@ -362,18 +365,18 @@ function buildMarkdown(){
   const precio=$val("precio")||"Consultar";
   const lines=[
     "---",
-    `title: ${quote($val("title"))}`,
-    `description: ${quote($val("description"))}`,
+    `title: ${sQuote($val("title"))}`,
+    `description: ${sQuote($val("description"))}`,
     `pubDate: ${$val("pubDate")}`,
     `nivel: "${$val("nivel")}"`,
-    `ciclo: ${quote($val("ciclo"))}`,
-    `asignatura: ${quote($val("asignatura"))}`,
-    `materia: ${quote($val("materia"))}`,
+    `ciclo: ${sQuote($val("ciclo"))}`,
+    `asignatura: ${sQuote($val("asignatura"))}`,
+    `materia: ${sQuote($val("materia"))}`,
     `formato: "PDF"`,
     `paginas: ${Number($("paginas").value)}`,
     `unidades:${listYaml(lists.unidad)}`,
     `incluye:${listYaml(lists.incluye)}`,
-    `precio: ${quote(precio)}`,
+    `precio: ${sQuote(precio)}`,
     `precioDestacado: ${$("precioDestacado").checked}`,
     `coverFrom: "${palFrom}"`,
     `coverTo: "${palTo}"`,
@@ -458,6 +461,7 @@ function mostrarEditor(titulo){
 function editar(slug){
   editandoSlug=slug;
   mostrarEditor("Editar: "+slug);
+  $("btnBorrar").classList.remove("hidden");
   api("/api/recurso?slug="+encodeURIComponent(slug)).then((rec)=>{
     const md=rec.content||"";
     let fm={},body="";
