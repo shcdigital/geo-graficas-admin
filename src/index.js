@@ -248,10 +248,9 @@ async function saveRecurso(env, { slug, content, message }) {
   const existing = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}?ref=${env.DEFAULT_BRANCH}`);
   const isUpdate = existing.ok;
 
-  const base64 = btoa(unescape(encodeURIComponent(content)));
   const body = {
     branch: env.DEFAULT_BRANCH,
-    content: base64,
+    content,
     commit_message: message || (isUpdate ? `Actualizar ${slug}.md` : `Crear ${slug}.md`),
   };
   if (isUpdate) body.last_commit_id = existing.data?.last_commit_id;

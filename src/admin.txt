@@ -11,7 +11,7 @@
     --surface:#ffffff;--raised:#fafafa;--border:#e5e7eb;--text:#1a1a1a;--muted:#6b7280;
     --green:#16a34a;--red:#dc2626;
     --font:"Inter",system-ui,sans-serif;
-    --radius:14px;
+    --radius:14px;--radius-sm:10px;--radius-full:9999px;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:var(--font);color:var(--text);background:var(--raised);-webkit-font-smoothing:antialiased}
@@ -21,32 +21,61 @@
     text-transform:uppercase;text-align:center;white-space:nowrap;font-family:Arial,sans-serif;
   }
   .shc-banner .dot{color:#f00}
-  .wrap{max-width:1100px;margin:0 auto;padding:1.5rem clamp(1rem,4vw,2rem)}
+  .wrap{max-width:1020px;margin:0 auto;padding:1.5rem clamp(1rem,4vw,2rem)}
   .top{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
   .top h1{background:var(--gradient);-webkit-background-clip:text;background-clip:text;color:transparent;margin:0;font-size:1.6rem}
-  .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;font-size:.9rem;padding:.6rem 1.2rem;border-radius:999px;transition:.15s}
+  .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;font-size:.9rem;padding:.6rem 1.2rem;border-radius:var(--radius-full);transition:.15s;box-shadow:0 1px 2px rgba(17,24,39,.06)}
   .btn-primary{background:var(--gradient);color:#fff}
+  .btn-success{background:var(--green);color:#fff}
   .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--text)}
   .btn-danger{background:var(--red);color:#fff}
   .btn-sm{padding:.4rem .9rem;font-size:.8rem}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 2px rgba(17,24,39,.06)}
-  .card h2{margin:0 0 .5rem;font-size:1.05rem}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.5rem;box-shadow:0 1px 2px rgba(17,24,39,.06)}
+  .card h2{font-size:1.1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border);margin:0 0 1.25rem}
   .row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem}
   .rec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:.4rem}
   .rec .name{font-weight:600;word-break:break-all}
   .rec .meta{font-size:.8rem;color:var(--muted)}
   .rec .acts{display:flex;gap:.5rem;margin-top:.5rem}
-  input[type=text],input[type=password],textarea,select{font-family:inherit;font-size:.9rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:10px;width:100%;margin-top:.25rem}
-  label{font-size:.85rem;font-weight:600}
-  .field{margin-bottom:.8rem}
+  input[type=text],input[type=date],input[type=number],input[type=password],select,textarea{font-family:inherit;font-size:.95rem;padding:.6rem .75rem;border:1px solid var(--border);border-radius:var(--radius-sm);width:100%;margin-top:.25rem;background:#fff;color:inherit}
+  input:focus,select:focus,textarea:focus{outline:2px solid var(--brand-end);outline-offset:1px;border-color:transparent}
+  label{font-size:.85rem;font-weight:600;display:block}
+  textarea{resize:vertical;min-height:70px}
+  .hint{font-size:.75rem;color:var(--muted);font-weight:400}
+  .field{display:flex;flex-direction:column;gap:.3rem;margin-bottom:1rem}
+  .field.full{grid-column:1/-1}
+  .invalid{border-color:var(--red)!important;outline:2px solid var(--red)!important}
+  .error-msg{color:var(--red);font-size:.78rem}
+  .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+  @media(max-width:720px){.form-grid{grid-template-columns:1fr}}
+  .checkbox-row{display:flex;gap:1.25rem;flex-wrap:wrap}
+  .checkbox{display:flex;align-items:center;gap:.5rem;font-weight:500}
+  .checkbox input{width:1.05rem;height:1.05rem;accent-color:var(--brand-mid);margin:0}
+  .chip-input{display:flex;gap:.5rem}
+  .chip-input input{flex:1}
+  .chip-input button{padding:.55rem 1rem;border:none;border-radius:var(--radius-sm);background:var(--gradient);color:#fff;font-weight:600;cursor:pointer;white-space:nowrap;margin-top:.25rem}
+  .chips{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:.5rem;min-height:1.5rem}
+  .chip{display:inline-flex;align-items:center;gap:.4rem;padding:.3rem .75rem;background:var(--raised);border:1px solid var(--border);border-radius:var(--radius-full);font-size:.82rem}
+  .chip button{border:none;background:none;color:var(--muted);font-size:1rem;cursor:pointer;line-height:1;font-weight:700;padding:0;margin:0}
+  .chip button:hover{color:var(--red)}
+  .palettes{display:grid;grid-template-columns:repeat(3,1fr);gap:.6rem}
+  @media(max-width:720px){.palettes{grid-template-columns:1fr}}
+  .palette{display:flex;align-items:center;gap:.6rem;padding:.5rem .75rem;border:2px solid transparent;border-radius:var(--radius-sm);background:#fff;cursor:pointer;font-size:.82rem;font-family:inherit}
+  .palette:hover{border-color:var(--border)}
+  .palette.selected{border-color:var(--brand-mid);font-weight:600}
+  .palette .swatch{width:100%;height:14px;border-radius:6px}
+  .preview-media{position:relative;display:grid;place-items:center;aspect-ratio:4/3;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border)}
+  .preview-media .emoji{font-size:3rem;filter:drop-shadow(0 4px 8px rgba(0,0,0,.18))}
+  .preview-media .materia{position:absolute;left:.75rem;bottom:.75rem;color:#fff;font-weight:600;font-size:.875rem;text-shadow:0 1px 3px rgba(0,0,0,.4)}
+  .preview-chip{position:absolute;top:.75rem;right:.75rem;padding:.25rem .65rem;font-size:.7rem;font-weight:700;color:#fff;border-radius:var(--radius-full);background:var(--gradient)}
+  .savebar{position:sticky;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--border);padding:.8rem 1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center;margin-top:1rem;border-radius:var(--radius)}
+  .actions{display:flex;gap:.75rem;flex-wrap:wrap;margin:1.5rem 0}
+  #msg{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:.6rem 1.2rem;border-radius:var(--radius-full);font-weight:500;font-size:.85rem;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+  #msg.show{opacity:1}
   .hidden{display:none}
   .muted{color:var(--muted);font-size:.85rem}
-  pre{background:#111;color:#e5e7eb;border-radius:10px;padding:1rem;overflow:auto;font-size:.8rem}
-  #msg{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:.6rem 1.2rem;border-radius:999px;font-weight:500;font-size:.85rem;opacity:0;transition:.2s;pointer-events:none;z-index:50}
-  #msg.show{opacity:1}
-  textarea{font-family:ui-monospace,Menlo,monospace;min-height:340px}
-  .savebar{position:sticky;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--border);padding:.8rem 1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center;margin-top:1rem;border-radius:var(--radius)}
   .divider{display:flex;align-items:center;gap:.75rem;color:var(--muted);font-size:.8rem;margin:1rem 0}
   .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border)}
   .login-form{max-width:360px;margin:1.5rem auto 0}
@@ -58,7 +87,7 @@
 
 <div class="wrap">
   <div class="top">
-    <h1>Panel de Geo.Gráficas</h1>
+    <h1 id="topTitle">Panel de Geo.Gráficas</h1>
     <div class="row">
       <button class="btn btn-ghost" id="btnSSO" style="margin-right:auto">← Panel de clientes</button>
       <button class="btn btn-primary hidden" id="btnNuevo">+ Nuevo cuadernillo</button>
@@ -70,9 +99,7 @@
   <div class="card" id="loginCard">
     <h2>Acceso restringido</h2>
     <p class="muted">El acceso se gestiona desde el panel de clientes de SHC Digital.</p>
-
     <div class="divider">o ingreso local (prueba)</div>
-
     <div class="login-form">
       <div class="field"><label>Usuario</label><input type="text" id="locUser" autocomplete="username" /></div>
       <div class="field"><label>Contraseña</label><input type="password" id="locPass" autocomplete="current-password" /></div>
@@ -87,27 +114,156 @@
   </div>
 
   <!-- Editor -->
-  <div class="card hidden" id="editor">
-    <div class="top" style="margin-bottom:.5rem"><h2 id="edTitle">Nuevo cuadernillo</h2></div>
-    <div class="field">
-      <label>Slug (nombre de archivo, minúsculas y guiones)</label>
-      <input type="text" id="edSlug" placeholder="ej: matematica-funciones" />
-    </div>
-    <div class="field">
-      <label>Contenido (.md completo con frontmatter)</label>
-      <textarea id="edContent" placeholder="---&#10;title: ...&#10;description: ...&#10;---&#10;&#10;Contenido"></textarea>
-    </div>
-    <div class="field">
-      <label>Mensaje de commit (opcional)</label>
-      <input type="text" id="edMsg" placeholder="ej: Agregar cuadernillo de biología" />
-    </div>
-    <div class="savebar">
-      <span class="muted" id="edInfo"></span>
-      <div class="row">
-        <button class="btn btn-ghost" id="btnVolver">Volver</button>
-        <button class="btn btn-danger hidden" id="btnBorrar">Borrar cuadernillo</button>
-        <button class="btn btn-primary" id="btnGuardar">Guardar</button>
+  <div class="hidden" id="editor">
+
+    <!-- Identificación -->
+    <section class="card">
+      <h2 id="edTitle">Nuevo cuadernillo</h2>
+      <div class="form-grid">
+        <div class="field full">
+          <label for="title">Título *</label>
+          <input type="text" id="title" placeholder="Cuadernillo de Historia — Revolución Industrial" />
+          <span class="hint">El nombre del archivo (slug) se genera solo desde este título.</span>
+        </div>
+        <div class="field">
+          <label for="slug">Slug (nombre del archivo)</label>
+          <input type="text" id="slug" readonly placeholder="se genera automáticamente" />
+          <span class="hint">Se genera automáticamente desde el título.</span>
+        </div>
+        <input type="hidden" id="pubDate" />
+        <div class="field full">
+          <label for="description">Descripción * <span class="hint">(mínimo 20 caracteres)</span></label>
+          <textarea id="description" placeholder="Descripción corta que aparece en la tarjeta y en Google."></textarea>
+          <span class="error-msg" id="desc-error" hidden>Tiene que tener al menos 20 caracteres.</span>
+        </div>
       </div>
+    </section>
+
+    <!-- Clasificación -->
+    <section class="card">
+      <h2>Clasificación</h2>
+      <div class="form-grid">
+        <div class="field">
+          <label for="nivel">Nivel *</label>
+          <select id="nivel">
+            <option value="Secundaria">Secundaria</option>
+            <option value="Secundaria Básica">Secundaria Básica</option>
+            <option value="Secundaria Superior">Secundaria Superior</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="ciclo">Ciclo *</label>
+          <input type="text" id="ciclo" placeholder="Ciclo Básico · 2° y 3° año" />
+        </div>
+        <div class="field">
+          <label for="asignatura">Asignatura *</label>
+          <input type="text" id="asignatura" placeholder="Matemática" />
+        </div>
+        <div class="field">
+          <label for="materia">Materia *</label>
+          <input type="text" id="materia" placeholder="Funciones" />
+        </div>
+        <div class="field">
+          <label for="paginas">Páginas * <span class="hint">(entero mayor a 0)</span></label>
+          <input type="number" id="paginas" min="1" step="1" placeholder="46" />
+        </div>
+        <div class="field">
+          <label for="precio">Precio</label>
+          <input type="text" id="precio" placeholder="AR$ 4.500" />
+          <span class="hint">Vacío = "Consultar"</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Contenido -->
+    <section class="card">
+      <h2>Contenido del cuadernillo</h2>
+      <div class="form-grid">
+        <div class="field">
+          <label>Unidades</label>
+          <div class="chips" id="unidad-chips"></div>
+          <div class="chip-input">
+            <input type="text" id="unidad-input" placeholder="Ej: Funciones lineales" />
+            <button type="button" data-add="unidad">Agregar</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Incluye</label>
+          <div class="chips" id="incluye-chips"></div>
+          <div class="chip-input">
+            <input type="text" id="incluye-input" placeholder="Ej: Teoría simplificada" />
+            <button type="button" data-add="incluye">Agregar</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Portada -->
+    <section class="card">
+      <h2>Portada y personalización</h2>
+      <div class="form-grid">
+        <div class="field">
+          <label for="emoji">Emoji de portada</label>
+          <select id="emoji">
+            <option value="📘">📘 Libro</option>
+            <option value="📈">📈 Gráfico</option>
+            <option value="🔬">🔬 Ciencia</option>
+            <option value="📜">📜 Historia</option>
+            <option value="✏️">✏️ Escritura</option>
+            <option value="📊">📊 Datos</option>
+            <option value="🧪">🧪 Laboratorio</option>
+            <option value="📚">📚 Libros</option>
+            <option value="🌍">🌍 Geografía</option>
+            <option value="🧮">🧮 Matemática</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Degradado de portada</label>
+          <div class="palettes" id="palettes">
+            <button type="button" class="palette selected" data-from="#f9ce34" data-to="#ee2a7b"><span class="swatch" style="background:linear-gradient(45deg,#f9ce34,#ee2a7b)"></span>Sol → Rosa</button>
+            <button type="button" class="palette" data-from="#ee2a7b" data-to="#6228d7"><span class="swatch" style="background:linear-gradient(45deg,#ee2a7b,#6228d7)"></span>Rosa → Violeta</button>
+            <button type="button" class="palette" data-from="#6228d7" data-to="#2563eb"><span class="swatch" style="background:linear-gradient(45deg,#6228d7,#2563eb)"></span>Violeta → Azul</button>
+            <button type="button" class="palette" data-from="#16a34a" data-to="#0284c7"><span class="swatch" style="background:linear-gradient(45deg,#16a34a,#0284c7)"></span>Verde → Cian</button>
+            <button type="button" class="palette" data-from="#f97316" data-to="#dc2626"><span class="swatch" style="background:linear-gradient(45deg,#f97316,#dc2626)"></span>Naranja → Rojo</button>
+            <button type="button" class="palette" data-from="#db2777" data-to="#f59e0b"><span class="swatch" style="background:linear-gradient(45deg,#db2777,#f59e0b)"></span>Magenta → Ámbar</button>
+          </div>
+        </div>
+        <div class="field">
+          <label>Opciones</label>
+          <div class="checkbox-row">
+            <label class="checkbox"><input type="checkbox" id="destacado" /> Destacado</label>
+            <label class="checkbox"><input type="checkbox" id="precioDestacado" /> Precio destacado</label>
+            <label class="checkbox"><input type="checkbox" id="draft" /> Draft (oculto)</label>
+          </div>
+        </div>
+        <div class="field">
+          <label>Vista previa</label>
+          <div class="preview-media" id="preview" style="background:linear-gradient(135deg,#f9ce34,#ee2a7b)">
+            <span class="preview-chip" hidden>Destacado</span>
+            <span class="emoji" id="preview-emoji">📘</span>
+            <span class="materia" id="preview-materia">—</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Cuerpo -->
+    <section class="card">
+      <h2>Cuerpo (descripción larga)</h2>
+      <div class="field full">
+        <textarea id="body" rows="4" placeholder="Descripción larga en Markdown para la página de detalle."></textarea>
+      </div>
+      <div class="field full">
+        <label for="adminMsg">Mensaje al administrador</label>
+        <textarea id="adminMsg" rows="3" placeholder="Nota interna para el administrador (no se muestra en el sitio). Ej: revisar precio, fuente de los datos, etc."></textarea>
+      </div>
+    </section>
+
+    <div class="actions">
+      <button type="button" class="btn btn-primary" id="btnSubir">Subir publicación</button>
+      <button type="button" class="btn btn-ghost" id="btnLimpiar">Limpiar</button>
+      <button type="button" class="btn btn-danger hidden" id="btnBorrar">Borrar cuadernillo</button>
+      <button type="button" class="btn btn-ghost" id="btnVolver" style="margin-left:auto">Volver</button>
     </div>
   </div>
 </div>
@@ -115,14 +271,15 @@
 <div id="msg"></div>
 
 <script>
-// WORKER_BASE: donde vive la API del panel (Worker Cloudflare).
-// Cuando el panel se sirve desde el propio Worker, queda "" (mismo origen).
-// Cuando se sirve estático (GitLab Pages), se inyecta la URL del Worker.
 window.WORKER_BASE = "__WORKER_BASE__" || window.WORKER_BASE || "";
 const WB = window.WORKER_BASE;
 const CLIENTES_URL = "https://clientes.shcdigital.net.ar";
 const $=(id)=>document.getElementById(id);
+const $val=(id)=>$(id).value.trim();
 let sesion=null;
+let editandoSlug=null;
+let palFrom="#f9ce34",palTo="#ee2a7b";
+const lists={unidad:[],incluye:[]};
 
 async function api(path, opts={}){
   const r=await fetch(WB+path,{credentials:"include",...opts,headers:{...((opts.headers)||{}),"Content-Type":"application/json"}});
@@ -130,7 +287,7 @@ async function api(path, opts={}){
   if(!r.ok){throw new Error(d.error||"Error de red");}
   return d;
 }
-function toast(m){const t=$("msg");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
+function toast(m){const t=$("msg");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2600);}
 
 async function init(){
   try{sesion=await api("/auth/me");}catch(e){sesion={authed:false};}
@@ -170,61 +327,258 @@ async function cargar(){
     </div>`).join("")||'<p class="muted">No hay cuadernillos.</p>';
 }
 
-async function editar(slug){
-  $("panel").classList.add("hidden");
-  $("editor").classList.remove("hidden");
-  $("btnBorrar").classList.remove("hidden");
-  $("edTitle").textContent="Editar: "+slug;
-  $("edInfo").textContent="Editando "+slug+".md";
-  $("edSlug").value=slug;
-  $("edContent").value="Cargando…";
-  const data=await api("/api/recurso?slug="+encodeURIComponent(slug));
-  if(data.content!==undefined){$("edContent").value=data.content;}else{$("edContent").value="# Error: "+JSON.stringify(data);}
+// ---------- Editor ----------
+function slugFrom(str){
+  return (str||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
+    .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
 }
-function nuevo(){
-  $("panel").classList.add("hidden");
-  $("editor").classList.remove("hidden");
-  $("btnBorrar").classList.add("hidden");
-  $("edTitle").textContent="Nuevo cuadernillo";
-  $("edInfo").textContent="Nuevo archivo";
-  $("edSlug").value="";$("edContent").value="";$("edMsg").value="";
+function quote(v){
+  const s=String(v).trim();
+  if(/[:#\[\]{},&*!|>'"]|\s/.test(s)) return `"${s.replace(/"/g,'\\"')}"`;
+  return s;
 }
-async function guardar(){
-  const slug=($("edSlug").value||"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
-  const content=$("edContent").value;
-  if(!slug||!content){toast("Completá slug y contenido");return;}
-  $("btnGuardar").disabled=true;
+function listYaml(arr){
+  return arr.length ? " "+JSON.stringify(arr.map(s=>String(s))) : " []";
+}
+function currentSlug(){ return editandoSlug || slugFrom($val("title")||"cuadernillo"); }
+
+function renderChips(name){
+  $(`${name}-chips`).innerHTML=lists[name]
+    .map((item,i)=>`<span class="chip">${item} <button type="button" data-remove="${name}" data-index="${i}" aria-label="Quitar">×</button></span>`)
+    .join("");
+}
+
+function updatePreview(){
+  const media=$("preview");
+  media.style.background=`linear-gradient(135deg, ${palFrom}, ${palTo})`;
+  $("preview-emoji").textContent=$val("emoji")||"📘";
+  $("preview-materia").textContent=$val("materia")||"—";
+  $("preview").querySelector(".preview-chip").hidden=!$("destacado").checked;
+}
+
+function buildMarkdown(){
+  const precio=$val("precio")||"Consultar";
+  const lines=[
+    "---",
+    `title: ${quote($val("title"))}`,
+    `description: ${quote($val("description"))}`,
+    `pubDate: ${$val("pubDate")}`,
+    `nivel: "${$val("nivel")}"`,
+    `ciclo: ${quote($val("ciclo"))}`,
+    `asignatura: ${quote($val("asignatura"))}`,
+    `materia: ${quote($val("materia"))}`,
+    `formato: "PDF"`,
+    `paginas: ${Number($("paginas").value)}`,
+    `unidades:${listYaml(lists.unidad)}`,
+    `incluye:${listYaml(lists.incluye)}`,
+    `precio: ${quote(precio)}`,
+    `precioDestacado: ${$("precioDestacado").checked}`,
+    `coverFrom: "${palFrom}"`,
+    `coverTo: "${palTo}"`,
+    `emoji: "${$val("emoji")||"📘"}"`,
+    `destacado: ${$("destacado").checked}`,
+    `draft: ${$("draft").checked}`,
+    "---",
+    "",
+    $val("body")||"Escribí acá la descripción larga en Markdown…",
+    "",
+  ];
+  return lines.join("\n");
+}
+
+function validate(){
+  let ok=true;
+  ["title","ciclo","asignatura","materia","paginas"].forEach(id=>{
+    const bad=!$val(id);
+    $(id).classList.toggle("invalid",bad);
+    if(bad)ok=false;
+  });
+  const desc=$("description");
+  const descBad=desc.value.trim().length<20;
+  desc.classList.toggle("invalid",descBad);
+  $("desc-error").hidden=!descBad;
+  if(descBad)ok=false;
+  const pag=Number($("paginas").value);
+  if(!$val("paginas")||!Number.isInteger(pag)||pag<=0){
+    $("paginas").classList.add("invalid");ok=false;
+  }
+  return ok;
+}
+
+async function subir(){
+  if(!validate()){toast("⚠ Revisá los campos marcados en rojo");return;}
+  if(!editandoSlug)$("pubDate").value=new Date().toISOString().split("T")[0];
+  const slug=currentSlug();
+  const md=buildMarkdown();
+  const msg=$val("adminMsg")||(editandoSlug?`Actualizar ${slug}.md`:`Crear ${slug}.md`);
+  $("btnSubir").disabled=true;
+  $("btnSubir").textContent="Subiendo…";
   try{
-    const d=await api("/api/recurso",{method:"POST",body:JSON.stringify({slug,content,message:$("edMsg").value||undefined})});
-    toast(d.message||"Guardado");$("btnVolver").click();
-  }catch(e){toast(e.message);}finally{$("btnGuardar").disabled=false;}
+    const d=await api("/api/recurso",{method:"POST",body:JSON.stringify({slug,content:md,message:msg})});
+    if(d.ok||d.message)toast(d.message||"Guardado");
+    else if(d.error)throw new Error(d.error);
+    volver();
+  }catch(e){
+    toast(e.message||"No se pudo publicar");
+    $("btnSubir").disabled=false;
+    $("btnSubir").textContent="Subir publicación";
+  }
+}
+
+function stripQuotes(v){
+  if(v===null||v===undefined)return v;
+  let s=String(v).trim();
+  if(s.startsWith('"')&&s.endsWith('"'))s=s.slice(1,-1);
+  if(s.startsWith("'")&&s.endsWith("'"))s=s.slice(1,-1);
+  return s;
+}
+
+function clearEditorFields(){
+  ["title","description","ciclo","asignatura","materia","paginas","precio","emoji","body","adminMsg"].forEach(id=>{const el=$(id);if(el)el.value="";});
+  $("slug").value="";
+  $("nivel").value="Secundaria";
+  $("destacado").checked=false;$("precioDestacado").checked=false;$("draft").checked=false;
+  lists.unidad=[];lists.incluye=[];
+  renderChips("unidad");renderChips("incluye");
+  selectPalette("#f9ce34","#ee2a7b");
+  $("desc-error").hidden=true;
+  ["title","ciclo","asignatura","materia","paginas","description"].forEach(id=>$(id).classList.remove("invalid"));
+  $("topTitle").textContent="Editar cuadernillo";
+}
+
+function mostrarEditor(titulo){
+  $("panel").classList.add("hidden");
+  $("editor").classList.remove("hidden");
+  $("edTitle").textContent=titulo;
+  clearEditor();
+}
+
+function editar(slug){
+  editandoSlug=slug;
+  mostrarEditor("Editar: "+slug);
+  api("/api/recurso?slug="+encodeURIComponent(slug)).then((rec)=>{
+    const md=rec.content||"";
+    let fm={},body="";
+    const m=md.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+    if(m){
+      body=(m[2]||"").trim();
+      m[1].split("\n").forEach(line=>{
+        const kv=line.match(/^([a-zA-Z0-9_]+):\s*(.*)$/);
+        if(!kv)return;
+        const key=kv[1],val=kv[2];
+        if(key==="unidades"||key==="incluye"){
+          const listKey=key==="unidades"?"unidad":"incluye";
+          let items=[];
+          const v=(val||"").trim();
+          if(v.startsWith("[")){
+            try{items=JSON.parse(v).map(String);}catch(e){items=[];}
+          }else{
+            const block=(md.match(new RegExp("^"+key+":(?:\\n  - .*)+", "m"))||[""])[0];
+            items=block.split("\n").slice(1).map(l=>l.replace(/^\s*-\s*/,"").trim()).filter(Boolean);
+          }
+          lists[listKey]=items.map(stripQuotes);
+          renderChips(listKey);
+          return;
+        }
+        fm[key]=stripQuotes(val);
+      });
+    }
+    if(fm.title!==undefined)$("title").value=fm.title;
+    if(fm.description!==undefined)$("description").value=fm.description;
+    if(fm.nivel)$("nivel").value=fm.nivel;
+    if(fm.ciclo!==undefined)$("ciclo").value=fm.ciclo;
+    if(fm.asignatura!==undefined)$("asignatura").value=fm.asignatura;
+    if(fm.materia!==undefined)$("materia").value=fm.materia;
+    if(fm.paginas!==undefined)$("paginas").value=fm.paginas;
+    if(fm.precio!==undefined)$("precio").value=(fm.precio==="Consultar"?"":fm.precio);
+    if(fm.pubDate!==undefined)$("pubDate").value=fm.pubDate;
+    if(fm.emoji)$("emoji").value=fm.emoji;
+    if(fm.coverFrom&&fm.coverTo)selectPalette(fm.coverFrom,fm.coverTo);
+    $("destacado").checked=fm.destacado==="true"||fm.destacado===true;
+    $("draft").checked=fm.draft==="true"||fm.draft===true;
+    $("precioDestacado").checked=fm.precioDestacado==="true"||fm.precioDestacado===true;
+    $("body").value=body||"";
+    $("slug").value=slug;
+    updatePreview();
+    toast("Cuadernillo cargado");
+  }).catch(e=>{toast(e.message||"No se pudo cargar");});
+}
+
+function selectPalette(from,to){
+  const p=[...document.querySelectorAll(".palette")].find(x=>x.dataset.from===from&&x.dataset.to===to);
+  const first=document.querySelector(".palette");
+  if(p){p.click();}
+  else if(first){first.click();}
+  else{palFrom=from||"#f9ce34";palTo=to||"#ee2a7b";updatePreview();}
+}
+
+function nuevo(){
+  editandoSlug=null;
+  $("topTitle").textContent="Nuevo cuadernillo";
+  $("edTitle").textContent="Nuevo cuadernillo";
+  $("btnBorrar").classList.add("hidden");
+  mostrarEditor("Nuevo cuadernillo");
+}
+
+function clearEditor(){ clearEditorFields(); }
+
+function volver(){
+  $("editor").classList.add("hidden");
+  $("panel").classList.remove("hidden");
+  editandoSlug=null;
+  cargar();
 }
 async function borrarDirecto(slug){
   if(!confirm("¿Borrar definitivamente "+slug+".md?"))return;
   try{const d=await api("/api/recurso",{method:"DELETE",body:JSON.stringify({slug})});toast(d.message||"Borrado");cargar();}catch(e){toast(e.message);}
 }
 async function borrarEditor(){
-  const slug=$("edSlug").value;
+  const slug=editandoSlug||currentSlug();
   if(!slug||!confirm("¿Borrar definitivamente "+slug+".md?"))return;
   $("btnBorrar").disabled=true;
-  try{const d=await api("/api/recurso",{method:"DELETE",body:JSON.stringify({slug})});toast(d.message||"Borrado");$("btnVolver").click();}catch(e){toast(e.message);}finally{$("btnBorrar").disabled=false;}
+  try{const d=await api("/api/recurso",{method:"DELETE",body:JSON.stringify({slug})});toast(d.message||"Borrado");volver();}catch(e){toast(e.message);}finally{$("btnBorrar").disabled=false;}
 }
-function volver(){$("editor").classList.add("hidden");$("panel").classList.remove("hidden");cargar();}
-async function cerrarSesion(){
-  // 1) cerrar la sesión interna del panel (cookie gg_session)
-  try{await fetch(WB+"/auth/logout",{credentials:"include"});}catch(e){}
-  // 2) ir al SSO y cerrar la sesión global (redirige al home de clientes.shcdigital.net.ar)
-  location.href = CLIENTES_URL+"/auth/logout";
+
+document.querySelectorAll("[data-add]").forEach(btn=>{btn.addEventListener("click",()=>finishAdd(btn.dataset.add));});
+document.querySelectorAll("[data-add]").forEach(btn=>{const name=btn.dataset.add;const inp=$(name+"-input");if(inp)inp.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();finishAdd(name);}});});
+document.addEventListener("click",(e)=>{
+  const rm=e.target.closest("[data-remove]");
+  if(!rm)return;
+  lists[rm.dataset.remove].splice(Number(rm.dataset.index),1);
+  renderChips(rm.dataset.remove);
+});
+document.querySelectorAll(".palette").forEach(p=>{
+  p.addEventListener("click",()=>{
+    document.querySelectorAll(".palette").forEach(x=>x.classList.remove("selected"));
+    p.classList.add("selected");
+    palFrom=p.dataset.from;palTo=p.dataset.to;
+    updatePreview();
+  });
+});
+$("title").addEventListener("input",()=>{if(!editandoSlug)$("slug").value=slugFrom($("title").value);});
+
+function finishAdd(name){
+  const inp=$(name+"-input");
+  const v=(inp?inp.value:"").trim();
+  if(!v)return;
+  lists[name].push(v);
+  if(inp)inp.value="";
+  renderChips(name);
 }
 
 $("btnNuevo").addEventListener("click",nuevo);
 $("btnSSO").addEventListener("click",()=>location.href=CLIENTES_URL);
-$("btnCerrar").addEventListener("click",cerrarSesion);
-$("btnGuardar").addEventListener("click",guardar);
+$("btnCerrar").addEventListener("click",()=>{
+  try{fetch(WB+"/auth/logout",{credentials:"include"});}catch(e){}
+  location.href=CLIENTES_URL+"/auth/logout";
+});
+$("btnSubir").addEventListener("click",subir);
+$("btnLimpiar").addEventListener("click",clearEditor);
 $("btnBorrar").addEventListener("click",borrarEditor);
 $("btnVolver").addEventListener("click",volver);
 $("btnLocal").addEventListener("click",loginLocal);
 $("locPass").addEventListener("keydown",(e)=>{if(e.key==="Enter")loginLocal();});
+["emoji","materia","destacado"].forEach(id=>$(id).addEventListener("change",updatePreview));
 init();
 </script>
 </body>
