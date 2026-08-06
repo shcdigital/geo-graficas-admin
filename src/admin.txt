@@ -626,12 +626,19 @@ $("portadaFile").addEventListener("change",(e)=>{
   };
   reader.readAsDataURL(file);
 });
-$("btnQuitarPortada").addEventListener("click",()=>{
+$("btnQuitarPortada").addEventListener("click",async ()=>{
+  const prev=imagenUrl;
   imagenData=null;
   imagenUrl="";
   $("portadaFile").value="";
   $("portadaRow").hidden=true;
   toast("Imagen de portada quitada");
+  if(prev){
+    try{
+      const base=prev.split("/").pop();
+      await api("/api/imagen",{method:"DELETE",body:JSON.stringify({slug:base})});
+    }catch(e){}
+  }
 });
 
 function mostrarPortada(){

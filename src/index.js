@@ -218,6 +218,14 @@ async function handleApi(request, env, ctx, url) {
     const res = await uploadImagen(env, { ...body, ext });
     return json(res, res.ok ? 200 : 400);
   }
+  if (resource === "imagen" && request.method === "DELETE") {
+    const body = await request.json();
+    if (!body || !body.slug) return json({ error: "Falta slug" }, 400);
+    const ext = String(body.ext || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (ext && !IMG_ALLOWED_EXT.includes(ext)) return json({ error: "Formato inválido" }, 400);
+    const res = await deleteImagen(env, { slug: body.slug, ext });
+    return json(res, res.ok ? 200 : 400);
+  }
   return json({ error: "Ruta no encontrada" }, 404);
 }
 
@@ -294,6 +302,18 @@ async function uploadImagen(env, { slug, ext, base64, message }) {
     path: imagePath,
     message: res.ok ? (isUpdate ? "Imagen actualizada" : "Imagen subida") : `GitLab: ${res.data?.message || res.status}`,
   };
+}
+
+async function deleteImagen(env, { slug, ext }) {
+  const rel = ext
+    ? `${env.IMG_PATH.replace(/^\/+/, "")}/${slug}.${ext}`
+    : `${env.IMG_PATH.replace(/^\/+/, "")}/${slug}`;
+  const imagePath = rel.replace(/^\/+/, "");
+  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(imagePath)}`, {
+    method: "DELETE",
+    body: JSON.stringify({ branch: env.DEFAULT_BRANCH, commit_message: `Eliminar imagen de ${slug}` }),
+  });
+  return { ok: res.ok, message: res.ok ? "Imagen eliminada" : `GitLab: ${res.data?.message || res.status}` };
 }
 
 async function deleteRecurso(env, { slug, message }) {
