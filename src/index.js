@@ -32,7 +32,7 @@ export default {
 
     // Panel admin (SPA) en la raíz
     if (url.pathname === "/" || url.pathname === "/admin") {
-      return new Response(renderAdmin(env, url), HTML_HEADERS);
+      return new Response(renderAdmin(env, url), { headers: HTML_HEADERS });
     }
 
     // SSO: el Worker de clientes (clientes.shcdigital.net.ar) valida el login
