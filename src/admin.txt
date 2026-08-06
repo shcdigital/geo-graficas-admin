@@ -159,15 +159,15 @@ async function cargar(){
   const data=await api("/api/recursos");
   const el=$("lista");
   if(data.error){el.innerHTML='<p class="muted">Error: '+data.error+'</p>';return;}
-  el.innerHTML=(data||[]).map(r=>\`
+  el.innerHTML=(data||[]).map(r=>`
     <div class="rec">
-      <div class="name">\${r.name}</div>
-      <div class="meta">\${r.slug} · \${r.size||0} B</div>
+      <div class="name">${r.name}</div>
+      <div class="meta">${r.slug} · ${r.size||0} B</div>
       <div class="acts">
-        <button class="btn btn-ghost btn-sm" onclick="editar('\${r.slug}')">Editar</button>
-        <button class="btn btn-danger btn-sm" onclick="borrarDirecto('\${r.slug}')">Borrar</button>
+        <button class="btn btn-ghost btn-sm" onclick="editar('${r.slug}')">Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="borrarDirecto('${r.slug}')">Borrar</button>
       </div>
-    </div>\`).join("")||'<p class="muted">No hay cuadernillos.</p>';
+    </div>`).join("")||'<p class="muted">No hay cuadernillos.</p>';
 }
 
 async function editar(slug){
