@@ -18,6 +18,8 @@ ADMIN_EMAILS = "cambiar@ejemplo.com"
 # Ruta base de los cuadernillos en el repo
 CONTENT_PATH = "src/content/recursos"
 DEFAULT_BRANCH = "main"
+# Proyecto GitLab donde vive el contenido (geo-graficas-web)
+GITLAB_PROJECT_ID = "85162233"
 
 # Rutas del sitio público (para anclas/links)
 [observability]
