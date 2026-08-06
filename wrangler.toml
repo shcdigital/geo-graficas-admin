@@ -2,6 +2,11 @@ name = "geo-graficas-admin"
 main = "src/index.js"
 compatibility_date = "2026-08-06"
 
+# Dominio de producción para este panel (subdominio propio bajo shcdigital.net.ar)
+[[routes]]
+pattern = "panel.geograficas.shcdigital.net.ar"
+custom_domain = true
+
 # Sesiones de login (SSO + local)
 [[kv_namespaces]]
 binding = "SESSIONS"
