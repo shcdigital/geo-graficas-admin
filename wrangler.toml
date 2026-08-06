@@ -22,6 +22,8 @@ TENANT_ID = "geo-graficas"
 ADMIN_EMAILS = "cambiar@ejemplo.com"
 # Ruta base de los cuadernillos en el repo
 CONTENT_PATH = "src/content/recursos"
+# Ruta pública de las imágenes de portada en el repo (public/ se sirve tal cual)
+IMG_PATH = "public/img/recursos"
 DEFAULT_BRANCH = "main"
 # Proyecto GitLab donde vive el contenido (geo-graficas-web)
 GITLAB_PROJECT_ID = "85162233"

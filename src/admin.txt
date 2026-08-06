@@ -70,6 +70,9 @@
   .preview-media .emoji{font-size:3rem;filter:drop-shadow(0 4px 8px rgba(0,0,0,.18))}
   .preview-media .materia{position:absolute;left:.75rem;bottom:.75rem;color:#fff;font-weight:600;font-size:.875rem;text-shadow:0 1px 3px rgba(0,0,0,.4)}
   .preview-chip{position:absolute;top:.75rem;right:.75rem;padding:.25rem .65rem;font-size:.7rem;font-weight:700;color:#fff;border-radius:var(--radius-full);background:var(--gradient)}
+  .imagen-row{display:flex;align-items:center;gap:.75rem;margin-top:.5rem}
+  .imagen-preview{width:100%;max-height:220px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border)}
+  .small{font-size:.78rem;margin:.3rem 0 0}
   .savebar{position:sticky;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--border);padding:.8rem 1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center;margin-top:1rem;border-radius:var(--radius)}
   .actions{display:flex;gap:.75rem;flex-wrap:wrap;margin:1.5rem 0}
   #msg{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:.6rem 1.2rem;border-radius:var(--radius-full);font-weight:500;font-size:.85rem;opacity:0;transition:.2s;pointer-events:none;z-index:50}
@@ -238,6 +241,15 @@
           </div>
         </div>
         <div class="field">
+          <label>Imagen de portada (opcional)</label>
+          <input type="file" id="portadaFile" accept="image/png,image/jpeg,image/webp,image/gif" />
+          <p class="muted small">Si no subís imagen, se usa el degradado + emoji.</p>
+          <div class="imagen-row" id="portadaRow" hidden>
+            <img class="imagen-preview" id="portadaPreview" alt="Portada" />
+            <button type="button" class="btn btn-ghost btn-sm" id="btnQuitarPortada">Quitar imagen</button>
+          </div>
+        </div>
+        <div class="field">
           <label>Vista previa</label>
           <div class="preview-media" id="preview" style="background:linear-gradient(135deg,#f9ce34,#ee2a7b)">
             <span class="preview-chip" hidden>Destacado</span>
@@ -281,6 +293,8 @@ let sesion=null;
 let editandoSlug=null;
 let palFrom="#f9ce34",palTo="#ee2a7b";
 const lists={unidad:[],incluye:[]};
+let imagenData=null;
+let imagenUrl="";
 
 async function api(path, opts={}){
   const r=await fetch(WB+path,{credentials:"include",...opts,headers:{...((opts.headers)||{}),"Content-Type":"application/json"}});
@@ -383,6 +397,7 @@ function buildMarkdown(){
     `emoji: "${$val("emoji")||"📘"}"`,
     `destacado: ${$("destacado").checked}`,
     `draft: ${$("draft").checked}`,
+    ...(imagenRel()?[`imagen: /${imagenRel()}`]:[]),
     "---",
     "",
     $val("body")||"Escribí acá la descripción larga en Markdown…",
@@ -414,11 +429,17 @@ async function subir(){
   if(!validate()){toast("⚠ Revisá los campos marcados en rojo");return;}
   if(!editandoSlug)$("pubDate").value=new Date().toISOString().split("T")[0];
   const slug=currentSlug();
-  const md=buildMarkdown();
-  const msg=$val("adminMsg")||(editandoSlug?`Actualizar ${slug}.md`:`Crear ${slug}.md`);
   $("btnSubir").disabled=true;
   $("btnSubir").textContent="Subiendo…";
   try{
+    if(imagenData){
+      const up=await api("/api/imagen",{method:"POST",body:JSON.stringify({slug,ext:imagenData.ext,base64:imagenData.base64})});
+      if(!up.ok)throw new Error(up.message||"No se pudo subir la imagen");
+      imagenUrl="/img/recursos/"+slug+"."+imagenData.ext;
+      imagenData=null;
+    }
+    const md=buildMarkdown();
+    const msg=$val("adminMsg")||(editandoSlug?`Actualizar ${slug}.md`:`Crear ${slug}.md`);
     const d=await api("/api/recurso",{method:"POST",body:JSON.stringify({slug,content:md,message:msg})});
     if(d.ok||d.message)toast(d.message||"Guardado");
     else if(d.error)throw new Error(d.error);
@@ -449,6 +470,9 @@ function clearEditorFields(){
   $("desc-error").hidden=true;
   ["title","ciclo","asignatura","materia","paginas","description"].forEach(id=>$(id).classList.remove("invalid"));
   $("topTitle").textContent="Editar cuadernillo";
+  imagenData=null;imagenUrl="";
+  $("portadaFile").value="";
+  $("portadaRow").hidden=true;
 }
 
 function mostrarEditor(titulo){
@@ -505,6 +529,9 @@ function editar(slug){
     $("precioDestacado").checked=fm.precioDestacado==="true"||fm.precioDestacado===true;
     $("body").value=body||"";
     $("slug").value=slug;
+    imagenData=null;
+    imagenUrl=fm.imagen||"";
+    mostrarPortada();
     updatePreview();
     toast("Cuadernillo cargado");
   }).catch(e=>{toast(e.message||"No se pudo cargar");});
@@ -585,6 +612,49 @@ $("btnVolver").addEventListener("click",volver);
 $("btnLocal").addEventListener("click",loginLocal);
 $("locPass").addEventListener("keydown",(e)=>{if(e.key==="Enter")loginLocal();});
 ["emoji","materia","destacado"].forEach(id=>$(id).addEventListener("change",updatePreview));
+
+$("portadaFile").addEventListener("change",(e)=>{
+  const file=e.target.files && e.target.files[0];
+  if(!file){return;}
+  const ext=(file.name.split(".").pop()||"").toLowerCase();
+  if(!["png","jpg","jpeg","webp","gif"].includes(ext)){toast("Formato no permitido: png/jpg/webp/gif");e.target.value="";return;}
+  const reader=new FileReader();
+  reader.onload=()=>{
+    imagenData={ base64:String(reader.result).split(",")[1], ext };
+    imagenUrl="";
+    mostrarPortada();
+  };
+  reader.readAsDataURL(file);
+});
+$("btnQuitarPortada").addEventListener("click",()=>{
+  imagenData=null;
+  imagenUrl="";
+  $("portadaFile").value="";
+  $("portadaRow").hidden=true;
+  toast("Imagen de portada quitada");
+});
+
+function mostrarPortada(){
+  const row=$("portadaRow");
+  const img=$("portadaPreview");
+  if(imagenData){
+    img.src="data:image/"+imagenData.ext+";base64,"+imagenData.base64;
+    row.hidden=false;
+  }else if(imagenUrl){
+    img.src=imagenUrl;
+    row.hidden=false;
+  }else{
+    row.hidden=true;
+    img.removeAttribute("src");
+  }
+}
+
+function imagenRel(){
+  if(imagenData)return "img/recursos/"+currentSlug()+"."+imagenData.ext;
+  if(imagenUrl)return imagenUrl.replace(/^\/+/, "");
+  return "";
+}
+
 init();
 </script>
 </body>
