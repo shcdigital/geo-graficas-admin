@@ -77,6 +77,11 @@
   .actions{display:flex;gap:.75rem;flex-wrap:wrap;margin:1.5rem 0}
   #msg{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:.6rem 1.2rem;border-radius:var(--radius-full);font-weight:500;font-size:.85rem;opacity:0;transition:.2s;pointer-events:none;z-index:50}
   #msg.show{opacity:1}
+  .ok-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.9);z-index:100;background:#fff;border-radius:var(--radius);box-shadow:0 20px 60px rgba(0,0,0,.35);padding:2rem 2.5rem;text-align:center;min-width:320px;max-width:92vw;opacity:0;pointer-events:none;transition:.25s ease;border-top:6px solid var(--gradient)}
+  .ok-popup.show{opacity:1;transform:translate(-50%,-50%) scale(1)}
+  .ok-popup .ok-icon{width:64px;height:64px;margin:0 auto 1rem;border-radius:50%;background:var(--gradient);color:#fff;font-size:2rem;display:grid;place-items:center;font-weight:700}
+  .ok-popup .ok-title{font-size:1.25rem;font-weight:700;margin-bottom:.4rem;color:#111}
+  .ok-popup .ok-text{font-size:.9rem;color:var(--muted);line-height:1.5}
   .hidden{display:none}
   .muted{color:var(--muted);font-size:.85rem}
   .divider{display:flex;align-items:center;gap:.75rem;color:var(--muted);font-size:.8rem;margin:1rem 0}
@@ -96,6 +101,7 @@
       <button class="btn btn-primary hidden" id="btnNuevo">+ Nuevo cuadernillo</button>
       <a class="btn btn-ghost hidden" id="btnSitio" href="https://geo-graficas-web-d6a153.gitlab.io" target="_blank" rel="noopener">Ver sitio</a>
       <button class="btn btn-ghost hidden" id="btnCerrar">Cerrar sesión</button>
+      <button type="button" class="btn btn-ghost hidden" id="btnVolverTop">← Volver</button>
     </div>
   </div>
 
@@ -283,6 +289,12 @@
 
 <div id="msg"></div>
 
+<div class="ok-popup" id="okPopup" role="status" aria-live="polite">
+  <div class="ok-icon">✓</div>
+  <div class="ok-title" id="okTitle">Publicación subida</div>
+  <div class="ok-text" id="okText">Se verá reflejado en el sitio en unos minutos.</div>
+</div>
+
 <script>
 window.WORKER_BASE = "__WORKER_BASE__" || window.WORKER_BASE || "";
 const WB = window.WORKER_BASE;
@@ -303,6 +315,15 @@ async function api(path, opts={}){
   return d;
 }
 function toast(m){const t=$("msg");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2600);}
+
+function okPopup(title,text){
+  const p=$("okPopup");
+  $("okTitle").textContent=title;
+  $("okText").textContent=text;
+  p.classList.add("show");
+  clearTimeout(p._t);
+  p._t=setTimeout(()=>p.classList.remove("show"),4200);
+}
 
 async function init(){
   try{sesion=await api("/auth/me");}catch(e){sesion={authed:false};}
@@ -441,7 +462,10 @@ async function subir(){
     const md=buildMarkdown();
     const msg=$val("adminMsg")||(editandoSlug?`Actualizar ${slug}.md`:`Crear ${slug}.md`);
     const d=await api("/api/recurso",{method:"POST",body:JSON.stringify({slug,content:md,message:msg})});
-    if(d.ok||d.message)toast(d.message||"Guardado");
+    if(d.ok||d.message){
+      if(editandoSlug)okPopup("Cambios guardados","Se actualizó “"+$("title").value.trim()+"”. Se verá reflejado en el sitio en unos minutos.");
+      else okPopup("¡Publicación subida!","Se publicó “"+$("title").value.trim()+"”. Se verá reflejado en el sitio en unos minutos.");
+    }
     else if(d.error)throw new Error(d.error);
     volver();
   }catch(e){
@@ -478,6 +502,8 @@ function clearEditorFields(){
 function mostrarEditor(titulo){
   $("panel").classList.add("hidden");
   $("editor").classList.remove("hidden");
+  $("btnVolverTop").classList.remove("hidden");
+  $("btnNuevo").classList.add("hidden");
   $("edTitle").textContent=titulo;
   clearEditor();
 }
@@ -558,6 +584,8 @@ function clearEditor(){ clearEditorFields(); }
 function volver(){
   $("editor").classList.add("hidden");
   $("panel").classList.remove("hidden");
+  $("btnVolverTop").classList.add("hidden");
+  $("btnNuevo").classList.remove("hidden");
   editandoSlug=null;
   cargar();
 }
@@ -609,6 +637,7 @@ $("btnSubir").addEventListener("click",subir);
 $("btnLimpiar").addEventListener("click",clearEditor);
 $("btnBorrar").addEventListener("click",borrarEditor);
 $("btnVolver").addEventListener("click",volver);
+$("btnVolverTop").addEventListener("click",volver);
 $("btnLocal").addEventListener("click",loginLocal);
 $("locPass").addEventListener("keydown",(e)=>{if(e.key==="Enter")loginLocal();});
 ["emoji","materia","destacado"].forEach(id=>$(id).addEventListener("change",updatePreview));
