@@ -1,0 +1,22 @@
+name = "geo-graficas-admin"
+main = "src/index.js"
+compatibility_date = "2026-08-06"
+
+# Sesiones de login (Google OAuth)
+[[kv_namespaces]]
+binding = "SESSIONS"
+id = "PENDIENTE_REEMPLAZAR_CON_KV_ID"
+
+# Variables de entorno (no secretas)
+[vars]
+APP_NAME = "Geo.Gráficas Admin"
+SITE_URL = "https://geo-graficas-web-d6a153.gitlab.io"
+# Emails con acceso (separados por coma)
+ADMIN_EMAILS = "cambiar@ejemplo.com"
+# Ruta base de los cuadernillos en el repo
+CONTENT_PATH = "src/content/recursos"
+DEFAULT_BRANCH = "main"
+
+# Rutas del sitio público (para anclas/links)
+[observability]
+enabled = true
