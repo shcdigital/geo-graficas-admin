@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Geo.Gráficas — Panel de administración</title>
+<style>
+  :root{
+    --brand-start:#f9ce34;--brand-mid:#ee2a7b;--brand-end:#6228d7;
+    --gradient:linear-gradient(45deg,#f9ce34 0%,#ee2a7b 50%,#6228d7 100%);
+    --surface:#ffffff;--raised:#fafafa;--border:#e5e7eb;--text:#1a1a1a;--muted:#6b7280;
+    --green:#16a34a;--red:#dc2626;
+    --font:"Inter",system-ui,sans-serif;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:var(--font);color:var(--text);background:var(--raised);-webkit-font-smoothing:antialiased}
+  .shc-banner{
+    display:flex;align-items:center;justify-content:center;gap:.6rem;padding:clamp(1.1rem,3vw,2rem) 1rem;
+    background:#000;color:#fff;font-weight:800;font-size:clamp(1.2rem,5vw,3rem);letter-spacing:.12em;
+    text-transform:uppercase;text-align:center;white-space:nowrap;font-family:Arial,sans-serif;
+  }
+  .shc-banner .dot{color:#f00}
+  .wrap{max-width:1100px;margin:0 auto;padding:1.5rem clamp(1rem,4vw,2rem)}
+  .top{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
+  .top h1{background:var(--gradient);-webkit-background-clip:text;background-clip:text;color:transparent;margin:0;font-size:1.6rem}
+  .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;font-size:.9rem;padding:.6rem 1.2rem;border-radius:999px;transition:.15s}
+  .btn-primary{background:var(--gradient);color:#fff}
+  .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--text)}
+  .btn-danger{background:var(--red);color:#fff}
+  .btn-sm{padding:.4rem .9rem;font-size:.8rem}
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 2px rgba(17,24,39,.06)}
+  .card h2{margin:0 0 .5rem;font-size:1.05rem}
+  .row{display:flex;gap:.75rem;flex-wrap:wrap;align-items:center}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem}
+  .rec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:.4rem}
+  .rec .name{font-weight:600;word-break:break-all}
+  .rec .meta{font-size:.8rem;color:var(--muted)}
+  .rec .acts{display:flex;gap:.5rem;margin-top:.5rem}
+  input[type=text],input[type=password],textarea,select{font-family:inherit;font-size:.9rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:10px;width:100%;margin-top:.25rem}
+  label{font-size:.85rem;font-weight:600}
+  .field{margin-bottom:.8rem}
+  .hidden{display:none}
+  .muted{color:var(--muted);font-size:.85rem}
+  pre{background:#111;color:#e5e7eb;border-radius:10px;padding:1rem;overflow:auto;font-size:.8rem}
+  #msg{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:.6rem 1.2rem;border-radius:999px;font-weight:500;font-size:.85rem;opacity:0;transition:.2s;pointer-events:none;z-index:50}
+  #msg.show{opacity:1}
+  textarea{font-family:ui-monospace,Menlo,monospace;min-height:340px}
+  .savebar{position:sticky;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--border);padding:.8rem 1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center;margin-top:1rem;border-radius:var(--radius)}
+  .divider{display:flex;align-items:center;gap:.75rem;color:var(--muted);font-size:.8rem;margin:1rem 0}
+  .divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--border)}
+  .login-form{max-width:360px;margin:1.5rem auto 0}
+  @media(max-width:600px){.savebar{flex-direction:column;align-items:stretch}}
+</style>
+</head>
+<body>
+<div class="shc-banner">Coding by&nbsp;SHC<span class="dot">.</span>DIGITAL</div>
+
+<div class="wrap">
+  <div class="top">
+    <h1>Panel de Geo.Gráficas</h1>
+    <div class="row">
+      <button class="btn btn-primary hidden" id="btnNuevo">+ Nuevo cuadernillo</button>
+      <button class="btn btn-ghost hidden" id="btnCerrar">Cerrar sesión</button>
+    </div>
+  </div>
+
+  <!-- Login -->
+  <div class="card" id="loginCard">
+    <h2>Acceso restringido</h2>
+    <p class="muted">Ingresá con tu cuenta de Google o con usuario y contraseña local.</p>
+
+    <div class="row">
+      <button class="btn btn-primary" onclick="location.href=WB+'/auth/login'">Continuar con Google</button>
+    </div>
+
+    <div class="divider">o con contraseña</div>
+
+    <div class="login-form">
+      <div class="field"><label>Usuario</label><input type="text" id="locUser" autocomplete="username" /></div>
+      <div class="field"><label>Contraseña</label><input type="password" id="locPass" autocomplete="current-password" /></div>
+      <div class="row"><button class="btn btn-ghost" id="btnLocal" style="width:100%">Ingresar</button></div>
+    </div>
+  </div>
+
+  <!-- Panel -->
+  <div class="hidden" id="panel">
+    <p class="muted" id="who"></p>
+    <div class="grid" id="lista"></div>
+  </div>
+
+  <!-- Editor -->
+  <div class="card hidden" id="editor">
+    <div class="top" style="margin-bottom:.5rem"><h2 id="edTitle">Nuevo cuadernillo</h2></div>
+    <div class="field">
+      <label>Slug (nombre de archivo, minúsculas y guiones)</label>
+      <input type="text" id="edSlug" placeholder="ej: matematica-funciones" />
+    </div>
+    <div class="field">
+      <label>Contenido (.md completo con frontmatter)</label>
+      <textarea id="edContent" placeholder="---&#10;title: ...&#10;description: ...&#10;---&#10;&#10;Contenido"></textarea>
+    </div>
+    <div class="field">
+      <label>Mensaje de commit (opcional)</label>
+      <input type="text" id="edMsg" placeholder="ej: Agregar cuadernillo de biología" />
+    </div>
+    <div class="savebar">
+      <span class="muted" id="edInfo"></span>
+      <div class="row">
+        <button class="btn btn-ghost" id="btnVolver">Volver</button>
+        <button class="btn btn-danger hidden" id="btnBorrar">Borrar cuadernillo</button>
+        <button class="btn btn-primary" id="btnGuardar">Guardar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="msg"></div>
+
+<script>
+// WORKER_BASE: donde vive la API del panel (Worker Cloudflare).
+// Cuando el panel se sirve desde el propio Worker, queda "" (mismo origen).
+// Cuando se sirve estático (GitLab Pages), se inyecta la URL del Worker.
+window.WORKER_BASE = "__WORKER_BASE__" || window.WORKER_BASE || "";
+const WB = window.WORKER_BASE;
+const $=(id)=>document.getElementById(id);
+let sesion=null;
+
+async function api(path, opts={}){
+  const r=await fetch(WB+path,{credentials:"include",...opts,headers:{...((opts.headers)||{}),"Content-Type":"application/json"}});
+  const d=await r.json().catch(()=>({error:"Respuesta no JSON"}));
+  if(!r.ok){throw new Error(d.error||"Error de red");}
+  return d;
+}
+function toast(m){const t=$("msg");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
+
+async function init(){
+  try{sesion=await api("/auth/me");}catch(e){sesion={authed:false};}
+  if(sesion.authed){
+    $("loginCard").classList.add("hidden");
+    $("panel").classList.remove("hidden");
+    $("btnNuevo").classList.remove("hidden");
+    $("btnCerrar").classList.remove("hidden");
+    $("who").textContent="Conectado como "+sesion.email;
+    cargar();
+  }
+}
+
+async function loginLocal(){
+  const user=$("locUser").value.trim();
+  const pass=$("locPass").value;
+  if(!user||!pass){toast("Completá usuario y contraseña");return;}
+  $("btnLocal").disabled=true;
+  try{
+    const d=await api("/auth/login-local",{method:"POST",body:JSON.stringify({user,pass})});
+    toast(d.message||"Ingresaste");init();
+  }catch(e){toast(e.message);}finally{$("btnLocal").disabled=false;}
+}
+
+async function cargar(){
+  const data=await api("/api/recursos");
+  const el=$("lista");
+  if(data.error){el.innerHTML='<p class="muted">Error: '+data.error+'</p>';return;}
+  el.innerHTML=(data||[]).map(r=>\`
+    <div class="rec">
+      <div class="name">\${r.name}</div>
+      <div class="meta">\${r.slug} · \${r.size||0} B</div>
+      <div class="acts">
+        <button class="btn btn-ghost btn-sm" onclick="editar('\${r.slug}')">Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="borrarDirecto('\${r.slug}')">Borrar</button>
+      </div>
+    </div>\`).join("")||'<p class="muted">No hay cuadernillos.</p>';
+}
+
+async function editar(slug){
+  $("panel").classList.add("hidden");
+  $("editor").classList.remove("hidden");
+  $("btnBorrar").classList.remove("hidden");
+  $("edTitle").textContent="Editar: "+slug;
+  $("edInfo").textContent="Editando "+slug+".md";
+  $("edSlug").value=slug;
+  $("edContent").value="Cargando…";
+  const data=await api("/api/recurso?slug="+encodeURIComponent(slug));
+  if(data.content!==undefined){$("edContent").value=data.content;}else{$("edContent").value="# Error: "+JSON.stringify(data);}
+}
+function nuevo(){
+  $("panel").classList.add("hidden");
+  $("editor").classList.remove("hidden");
+  $("btnBorrar").classList.add("hidden");
+  $("edTitle").textContent="Nuevo cuadernillo";
+  $("edInfo").textContent="Nuevo archivo";
+  $("edSlug").value="";$("edContent").value="";$("edMsg").value="";
+}
+async function guardar(){
+  const slug=($("edSlug").value||"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+  const content=$("edContent").value;
+  if(!slug||!content){toast("Completá slug y contenido");return;}
+  $("btnGuardar").disabled=true;
+  try{
+    const d=await api("/api/recurso",{method:"POST",body:JSON.stringify({slug,content,message:$("edMsg").value||undefined})});
+    toast(d.message||"Guardado");$("btnVolver").click();
+  }catch(e){toast(e.message);}finally{$("btnGuardar").disabled=false;}
+}
+async function borrarDirecto(slug){
+  if(!confirm("¿Borrar definitivamente "+slug+".md?"))return;
+  try{const d=await api("/api/recurso",{method:"DELETE",body:JSON.stringify({slug})});toast(d.message||"Borrado");cargar();}catch(e){toast(e.message);}
+}
+async function borrarEditor(){
+  const slug=$("edSlug").value;
+  if(!slug||!confirm("¿Borrar definitivamente "+slug+".md?"))return;
+  $("btnBorrar").disabled=true;
+  try{const d=await api("/api/recurso",{method:"DELETE",body:JSON.stringify({slug})});toast(d.message||"Borrado");$("btnVolver").click();}catch(e){toast(e.message);}finally{$("btnBorrar").disabled=false;}
+}
+function volver(){$("editor").classList.add("hidden");$("panel").classList.remove("hidden");cargar();}
+
+$("btnNuevo").addEventListener("click",nuevo);
+$("btnCerrar").addEventListener("click",()=>location.href=WB+"/auth/logout");
+$("btnGuardar").addEventListener("click",guardar);
+$("btnBorrar").addEventListener("click",borrarEditor);
+$("btnVolver").addEventListener("click",volver);
+$("btnLocal").addEventListener("click",loginLocal);
+$("locPass").addEventListener("keydown",(e)=>{if(e.key==="Enter")loginLocal();});
+init();
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+# Variables de desarrollo local para `npx wrangler dev`.
+# Copiá este archivo a `.dev.vars` y completalo con valores reales.
+# `.dev.vars` NO se comitea.
+
+# OAuth Google (probá con un proyecto de test o usá wrangler dev --remote)
+GOOGLE_CLIENT_ID=
+GOOGLE_CLIENT_SECRET=
+GOOGLE_REDIRECT_URI=http://127.0.0.1:8787/auth/callback
+
+# Token de proyecto GitLab (scope api) + id del repo geo-graficas-web
+GITLAB_TOKEN=
+GITLAB_PROJECT_ID=85162233
+
+# Origen permitido en CORS (el sitio público que llama al Worker)
+SITE_URL=https://geo-graficas-web-d6a153.gitlab.io
+# Emails con acceso (separados por coma)
+ADMIN_EMAILS=

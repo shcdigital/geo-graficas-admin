@@ -1,16 +1,22 @@
 // geo-graficas-admin · Cloudflare Worker
-// Panel de administración de Geo.Gráficas con autenticación de Google.
-// - OAuth2 de Google (secrets en wrangler secret)
+// Panel de administración de Geo.Gráficas.
+// - Login: Google OAuth2 (secrets) o local usuario/contraseña (PBKDF2, hash en el repo)
 // - Sesiones en Workers KV
 // - CRUD de cuadernillos (.md) contra la API de GitLab
-// Se sirve en: admin.<tu-dominio>.com.ar (ruta Cloudflare Workers)
+// Se sirve en: admin.<tu-dominio>.com.ar (ruta Cloudflare Workers) y también
+// como página estática en GitLab Pages (apuntando a este Worker para la API).
 
 // ---------- Secrets requeridos (wrangler secret put) ----------
-// GOOGLE_CLIENT_ID
-// GOOGLE_CLIENT_SECRET
-// GOOGLE_REDIRECT_URI  (ej: https://admin.midominio.com.ar/auth/callback)
-// GITLAB_TOKEN         (token de proyecto con scope api)
-// GITLAB_PROJECT_ID    (ej: 85162233)
+// GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
+// GITLAB_TOKEN (token de proyecto con scope api) / GITLAB_PROJECT_ID
+
+// Login local: hash PBKDF2-SHA256 (100000 iter) de la contraseña + salt.
+// SOLO está el hash, nunca la contraseña en claro.
+const LOCAL_USER = "admin";
+const LOCAL_SALT_B64 = "j+fjQHoDnbMq0a5Dlhrj6A==";
+const LOCAL_HASH_B64 = "UDJaznYt9Pv/+8Zbo1VzWhJ7xQVC0kX0uk6t0TxAZz0=";
+
+import adminHtml from "./admin.html?raw";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const HTML_HEADERS = { "Content-Type": "text/html; charset=utf-8" };
@@ -21,53 +27,60 @@ const GOOGLE_USERINFO = "https://www.googleapis.com/oauth2/v3/userinfo";
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-
-    // CORS para que el sitio (GitLab Pages) pueda llamar al Worker si hiciera falta
-    const cors = (res) => {
-      const r = new Response(res.body, res);
-      r.headers.set("Access-Control-Allow-Origin", env.SITE_URL || "*");
-      r.headers.set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-      r.headers.set("Access-Control-Allow-Headers", "Content-Type, Authorization");
-      r.headers.set("Access-Control-Allow-Credentials", "true");
-      return r;
-    };
+    const origin = request.headers.get("Origin") || "";
 
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: { "Access-Control-Allow-Origin": "*" } });
+      return new Response(null, { status: 204, headers: corsHeaders(env, origin) });
     }
 
     // Panel admin (SPA) en la raíz
     if (url.pathname === "/" || url.pathname === "/admin") {
-      return new Response(renderAdmin(env), HTML_HEADERS);
+      return new Response(renderAdmin(env, url), HTML_HEADERS);
     }
 
-    // OAuth
-    if (url.pathname === "/auth/login") {
-      return redirectGoogle(env, url);
-    }
-    if (url.pathname === "/auth/callback") {
-      return await handleCallback(request, env, ctx);
-    }
-    if (url.pathname === "/auth/logout") {
-      return await logout(request, env);
-    }
-    if (url.pathname === "/auth/me") {
-      return await me(request, env);
+    // OAuth Google
+    if (url.pathname === "/auth/login") return await redirectGoogle(env);
+    if (url.pathname === "/auth/callback") return await handleCallback(request, env, ctx);
+    if (url.pathname === "/auth/logout") return await logout(request, env, origin);
+    if (url.pathname === "/auth/me") return corsWrap(await me(request, env), env, origin);
+
+    // Login local
+    if (url.pathname === "/auth/login-local" && request.method === "POST") {
+      return corsWrap(await loginLocal(request, env, origin), env, origin);
     }
 
     // API de cuadernillos (requiere sesión)
     if (url.pathname.startsWith("/api/")) {
-      return cors(await handleApi(request, env, ctx, url));
+      return corsWrap(await handleApi(request, env, ctx, url), env, origin);
     }
 
     return new Response("Not found", { status: 404 });
   },
 };
 
+function corsHeaders(env, origin) {
+  const site = (env.SITE_URL || "").replace(/\/+$/, "");
+  const match = site && origin && origin.replace(/\/+$/, "") === site;
+  const allowOrigin = site ? (match ? origin : site) : origin;
+  return {
+    "Access-Control-Allow-Origin": allowOrigin,
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Vary": "Origin",
+  };
+}
+
+function corsWrap(res, env, origin) {
+  const r = new Response(res.body, res);
+  for (const k in corsHeaders(env, origin)) r.headers.set(k, corsHeaders(env, origin)[k]);
+  return r;
+}
+
 // ---------- Login ----------
-function redirectGoogle(env, url) {
+async function redirectGoogle(env) {
   const state = crypto.randomUUID();
-  const redirect = `${env.GOOGLE_REDIRECT_URI}?state=${state}`;
+  await env.SESSIONS.put(`state:${state}`, "1", { expirationTtl: 600 });
   const params = new URLSearchParams({
     client_id: env.GOOGLE_CLIENT_ID,
     redirect_uri: env.GOOGLE_REDIRECT_URI,
@@ -84,9 +97,7 @@ async function handleCallback(request, env, ctx) {
   const code = url.searchParams.get("code");
   const state = url.searchParams.get("state");
   const stored = await env.SESSIONS.get(`state:${state}`);
-  if (!code || !stored) {
-    return new Response("Login inválido (state). Volvé a intentar.", { status: 400 });
-  }
+  if (!code || !stored) return new Response("Login inválido (state). Volvé a intentar.", { status: 400 });
   await env.SESSIONS.delete(`state:${state}`);
 
   const tokenResp = await fetch(GOOGLE_TOKEN, {
@@ -100,36 +111,58 @@ async function handleCallback(request, env, ctx) {
       grant_type: "authorization_code",
     }),
   });
-  if (!tokenResp.ok) {
-    return new Response("Error obteniendo token de Google.", { status: 502 });
-  }
+  if (!tokenResp.ok) return new Response("Error obteniendo token de Google.", { status: 502 });
   const tokenData = await tokenResp.json();
-  const accessToken = tokenData.access_token;
 
-  const userResp = await fetch(GOOGLE_USERINFO, {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+  const userResp = await fetch(GOOGLE_USERINFO, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
   const user = await userResp.json();
 
   const allowed = (env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase());
   if (!allowed.includes((user.email || "").toLowerCase())) {
     return new Response("Tu correo no tiene permiso para acceder al panel.", { status: 403 });
   }
-
-  // Sesión con cookie firmada por KV
-  const sessionId = crypto.randomUUID();
-  const cookie = `gg_session=${sessionId}; HttpOnly; Secure; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 12}`;
-  await env.SESSIONS.put(`session:${sessionId}`, JSON.stringify({ email: user.email, name: user.name || user.email, at: Date.now() }), { expirationTtl: 60 * 60 * 12 });
-
-  return new Response(`<!doctype html><html><body><script>window.location.href = "/";</script></body></html>`, {
-    headers: { "Content-Type": "text/html", "Set-Cookie": cookie },
-  });
+  return makeSession(env, { email: user.email, name: user.name || user.email }, originOf(request));
 }
 
-async function logout(request, env) {
+async function loginLocal(request, env, origin) {
+  let body;
+  try { body = await request.json(); } catch { return json({ error: "Body inválido" }, 400); }
+  const user = String(body.user || "").trim();
+  const pass = String(body.pass || "");
+
+  if (user !== LOCAL_USER) return json({ error: "Usuario o contraseña incorrectos" }, 401);
+
+  const salt = Uint8Array.from(atob(LOCAL_SALT_B64), (c) => c.charCodeAt(0));
+  const expected = Uint8Array.from(atob(LOCAL_HASH_B64), (c) => c.charCodeAt(0));
+  const derived = await pbkdf2(pass, salt);
+  if (!constantTimeEqual(derived, expected)) return json({ error: "Usuario o contraseña incorrectos" }, 401);
+
+  return makeSession(env, { email: `${LOCAL_USER}@local`, name: "Administrador local" }, origin);
+}
+
+function originOf(request) {
+  return request.headers.get("Origin") || new URL(request.url).origin;
+}
+
+function makeSession(env, user, origin) {
+  const sessionId = crypto.randomUUID();
+  const cross = env.SITE_URL && (!origin || origin.replace(/\/+$/, "") !== (env.SITE_URL || "").replace(/\/+$/, ""));
+  const sameSite = cross ? "None" : "Lax";
+  const secure = cross ? "; Secure" : "";
+  const cookie = `gg_session=${sessionId}; HttpOnly; Path=/; SameSite=${sameSite}${secure}; Max-Age=${60 * 60 * 12}`;
+  return new Response(
+    `<!doctype html><html><body><script>window.location.href = "/";</script></body></html>`,
+    { headers: { "Content-Type": "text/html", "Set-Cookie": cookie } }
+  );
+}
+
+async function logout(request, env, origin) {
   const sessionId = getSession(request);
   if (sessionId) await env.SESSIONS.delete(`session:${sessionId}`);
-  const cookie = "gg_session=; HttpOnly; Path=/; SameSite=Lax; Max-Age=0";
+  const cross = env.SITE_URL && origin && origin.replace(/\/+$/, "") !== (env.SITE_URL || "").replace(/\/+$/, "");
+  const sameSite = cross ? "None" : "Lax";
+  const secure = cross ? "; Secure" : "";
+  const cookie = `gg_session=; HttpOnly; Path=/; SameSite=${sameSite}${secure}; Max-Age=0`;
   return new Response(`<script>window.location.href = "/";</script>`, {
     headers: { "Content-Type": "text/html", "Set-Cookie": cookie },
   });
@@ -137,28 +170,26 @@ async function logout(request, env) {
 
 async function me(request, env) {
   const sessionId = getSession(request);
-  if (!sessionId) return new Response(JSON.stringify({ authed: false }), JSON_HEADERS);
+  if (!sessionId) return json({ authed: false });
   const data = await env.SESSIONS.get(`session:${sessionId}`);
-  if (!data) return new Response(JSON.stringify({ authed: false }), JSON_HEADERS);
+  if (!data) return json({ authed: false });
   const user = JSON.parse(data);
-  return new Response(JSON.stringify({ authed: true, email: user.email, name: user.name }), JSON_HEADERS);
+  return json({ authed: true, email: user.email, name: user.name });
 }
 
 // ---------- API ----------
 async function handleApi(request, env, ctx, url) {
   const sessionId = getSession(request);
-  const session = sessionId ? JSON.parse(await env.SESSIONS.get(`session:${sessionId}`) || "null") : null;
+  const session = sessionId ? JSON.parse((await env.SESSIONS.get(`session:${sessionId}`)) || "null") : null;
   if (!session) return json({ error: "No autenticado" }, 401);
 
   const [_, , resource] = url.pathname.split("/");
 
-  if (resource === "recursos" && request.method === "GET") {
-    return json(await listRecursos(env), 200);
-  }
+  if (resource === "recursos" && request.method === "GET") return json(await listRecursos(env));
   if (resource === "recurso" && request.method === "GET") {
     const slug = url.searchParams.get("slug");
     if (!slug) return json({ error: "Falta slug" }, 400);
-    return json(await getRecurso(env, slug), 200);
+    return json(await getRecurso(env, slug));
   }
   if (resource === "recurso" && (request.method === "POST" || request.method === "PUT")) {
     const body = await request.json();
@@ -170,16 +201,12 @@ async function handleApi(request, env, ctx, url) {
     const res = await deleteRecurso(env, body);
     return json(res, res.ok ? 200 : 400);
   }
-
   return json({ error: "Ruta no encontrada" }, 404);
 }
 
 // ---------- GitLab API ----------
 function glHeaders(env) {
-  return {
-    "PRIVATE-TOKEN": env.GITLAB_TOKEN,
-    "Content-Type": "application/json",
-  };
+  return { "PRIVATE-TOKEN": env.GITLAB_TOKEN, "Content-Type": "application/json" };
 }
 
 async function glFetch(env, path, opts = {}) {
@@ -197,7 +224,6 @@ async function listRecursos(env) {
   if (!res.ok) return { error: `GitLab: ${res.data?.message || res.status}` };
   const files = Array.isArray(res.data) ? res.data.filter((f) => f.type === "blob" && f.name.endsWith(".md")) : [];
   const slugify = (name) => name.replace(/\.md$/, "");
-  // Armar lista con metadatos básicos (nombre, slug, tamaño)
   return files.map((f) => ({ name: f.name, slug: slugify(f.name), size: f.size, path: f.path }));
 }
 
@@ -248,200 +274,24 @@ function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
 }
 
-// ---------- SPA embebida ----------
-function renderAdmin(env) {
-  return `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>${env.APP_NAME || "Admin"}</title>
-<style>
-  :root{
-    --brand-start:#f9ce34;--brand-mid:#ee2a7b;--brand-end:#6228d7;
-    --gradient:linear-gradient(45deg,#f9ce34 0%,#ee2a7b 50%,#6228d7 100%);
-    --surface:#ffffff;--raised:#fafafa;--border:#e5e7eb;--text:#1a1a1a;--muted:#6b7280;
-    --green:#16a34a;--red:#dc2626;
-    --font:"Inter",system-ui,sans-serif;
-    --radius:14px;
-  }
-  *{box-sizing:border-box}
-  body{margin:0;font-family:var(--font);color:var(--text);background:var(--raised);-webkit-font-smoothing:antialiased}
-  .shc-banner{
-    display:flex;align-items:center;justify-content:center;gap:.6rem;padding:clamp(1.1rem,3vw,2rem) 1rem;
-    background:#000;color:#fff;font-weight:800;font-size:clamp(1.2rem,5vw,3rem);letter-spacing:.12em;
-    text-transform:uppercase;text-align:center;white-space:nowrap;font-family:Arial,sans-serif;
-  }
-  .shc-banner .dot{color:#f00}
-  .wrap{max-width:1100px;margin:0 auto;padding:1.5rem clamp(1rem,4vw,2rem)}
-  .top{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
-  .top h1{background:var(--gradient);-webkit-background-clip:text;background-clip:text;color:transparent;margin:0;font-size:1.6rem}
-  .btn{border:none;cursor:pointer;font-family:inherit;font-weight:600;font-size:.9rem;padding:.6rem 1.2rem;border-radius:999px;transition:.15s}
-  .btn-primary{background:var(--gradient);color:#fff}
-  .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--text)}
-  .btn-danger{background:var(--red);color:#fff}
-  .btn-sm{padding:.4rem .9rem;font-size:.8rem}
-  .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem;box-shadow:0 1px 2px rgba(17,24,39,.06)}
-  .card h2{margin:0 0 .5rem;font-size:1.05rem}
-  .row{display:flex;gap:.75rem;flex-wrap:wrap}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1rem}
-  .rec{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1rem;display:flex;flex-direction:column;gap:.4rem}
-  .rec .name{font-weight:600;word-break:break-all}
-  .rec .meta{font-size:.8rem;color:var(--muted)}
-  .rec .acts{display:flex;gap:.5rem;margin-top:.5rem}
-  input[type=text],textarea,select{font-family:inherit;font-size:.9rem;padding:.55rem .7rem;border:1px solid var(--border);border-radius:10px;width:100%;margin-top:.25rem}
-  label{font-size:.85rem;font-weight:600}
-  .field{margin-bottom:.8rem}
-  .hidden{display:none}
-  .muted{color:var(--muted);font-size:.85rem}
-  pre{background:#111;color:#e5e7eb;border-radius:10px;padding:1rem;overflow:auto;font-size:.8rem}
-  #msg{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:.6rem 1.2rem;border-radius:999px;font-weight:500;font-size:.85rem;opacity:0;transition:.2s;pointer-events:none;z-index:50}
-  #msg.show{opacity:1}
-  textarea{font-family:ui-monospace,Menlo,monospace;min-height:340px}
-  .savebar{position:sticky;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--border);padding:.8rem 1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center;margin-top:1rem;border-radius:var(--radius)}
-  @media(max-width:600px){.savebar{flex-direction:column;align-items:stretch}}
-</style>
-</head>
-<body>
-<div class="shc-banner">Coding by&nbsp;SHC<span class="dot">.</span>DIGITAL</div>
-
-<div class="wrap">
-  <div class="top">
-    <h1>Panel de Geo.Gráficas</h1>
-    <div class="row">
-      <button class="btn btn-primary hidden" id="btnNuevo">+ Nuevo cuadernillo</button>
-      <button class="btn btn-ghost hidden" id="btnCerrar">Cerrar sesión</button>
-    </div>
-  </div>
-
-  <!-- Login -->
-  <div class="card" id="loginCard">
-    <h2>Acceso restringido</h2>
-    <p class="muted">Ingresá con tu cuenta de Google para administrar los cuadernillos.</p>
-    <button class="btn btn-primary" onclick="location.href='/auth/login'">Continuar con Google</button>
-  </div>
-
-  <!-- Panel -->
-  <div class="hidden" id="panel">
-    <p class="muted" id="who"></p>
-    <div class="grid" id="lista"></div>
-  </div>
-
-  <!-- Editor -->
-  <div class="card hidden" id="editor">
-    <div class="top" style="margin-bottom:.5rem"><h2 id="edTitle">Nuevo cuadernillo</h2></div>
-    <div class="field">
-      <label>Slug (nombre de archivo, minúsculas y guiones)</label>
-      <input type="text" id="edSlug" placeholder="ej: matematica-funciones" />
-    </div>
-    <div class="field">
-      <label>Contenido (.md completo con frontmatter)</label>
-      <textarea id="edContent" placeholder="---&#10;title: ...&#10;description: ...&#10;---&#10;&#10;Contenido"></textarea>
-    </div>
-    <div class="field">
-      <label>Mensaje de commit (opcional)</label>
-      <input type="text" id="edMsg" placeholder="ej: Agregar cuadernillo de biología" />
-    </div>
-    <div class="savebar">
-      <span class="muted" id="edInfo"></span>
-      <div class="row">
-        <button class="btn btn-ghost" id="btnVolver">Volver</button>
-        <button class="btn btn-danger hidden" id="btnBorrar">Borrar cuadernillo</button>
-        <button class="btn btn-primary" id="btnGuardar">Guardar</button>
-      </div>
-    </div>
-  </div>
-</div>
-
-<div id="msg"></div>
-
-<script>
-const $=(id)=>document.getElementById(id);
-let sesion=null;
-
-async function api(path, opts={}){
-  const r=await fetch(path,{...opts,headers:{...((opts.headers)||{}),"Content-Type":"application/json"}});
-  const d=await r.json();
-  if(!r.ok){throw new Error(d.error||"Error de red");}
-  return d;
-}
-function toast(m){const t=$("msg");t.textContent=m;t.classList.add("show");clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);}
-
-async function init(){
-  try{sesion=await api("/auth/me");}catch(e){sesion={authed:false};}
-  if(sesion.authed){
-    $("loginCard").classList.add("hidden");
-    $("panel").classList.remove("hidden");
-    $("btnNuevo").classList.remove("hidden");
-    $("btnCerrar").classList.remove("hidden");
-    $("who").textContent="Conectado como "+sesion.email;
-    cargar();
-  }
+async function pbkdf2(password, salt) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
+  const bits = await crypto.subtle.deriveBits(
+    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
+    key,
+    256
+  );
+  return new Uint8Array(bits);
 }
 
-async function cargar(){
-  const data=await api("/api/recursos");
-  const el=$("lista");
-  if(data.error){el.innerHTML='<p class="muted">Error: '+data.error+'</p>';return;}
-  el.innerHTML=(data||[]).map(r=>\`
-    <div class="rec">
-      <div class="name">\${r.name}</div>
-      <div class="meta">\${r.slug} · \${r.size||0} B</div>
-      <div class="acts">
-        <button class="btn btn-ghost btn-sm" onclick="editar('\${r.slug}')">Editar</button>
-        <button class="btn btn-danger btn-sm" onclick="borrarDirecto('\${r.slug}')">Borrar</button>
-      </div>
-    </div>\`).join("")||'<p class="muted">No hay cuadernillos.</p>';
+function constantTimeEqual(a, b) {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
+  return diff === 0;
 }
 
-async function editar(slug){
-  $("panel").classList.add("hidden");
-  $("editor").classList.remove("hidden");
-  $("btnBorrar").classList.remove("hidden");
-  $("edTitle").textContent="Editar: "+slug;
-  $("edInfo").textContent="Editando "+slug+".md";
-  $("edSlug").value=slug;
-  $("edContent").value="Cargando…";
-  const data=await api("/api/recurso?slug="+encodeURIComponent(slug));
-  if(data.content!==undefined){$("edContent").value=data.content;}else{$("edContent").value="# Error: "+JSON.stringify(data);}
-}
-function nuevo(){
-  $("panel").classList.add("hidden");
-  $("editor").classList.remove("hidden");
-  $("btnBorrar").classList.add("hidden");
-  $("edTitle").textContent="Nuevo cuadernillo";
-  $("edInfo").textContent="Nuevo archivo";
-  $("edSlug").value="";$("edContent").value="";$("edMsg").value="";
-}
-async function guardar(){
-  const slug=($("edSlug").value||"").trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
-  const content=$("edContent").value;
-  if(!slug||!content){toast("Completá slug y contenido");return;}
-  $("btnGuardar").disabled=true;
-  try{
-    const d=await api("/api/recurso",{method:"POST",body:JSON.stringify({slug,content,message:$("edMsg").value||undefined})});
-    toast(d.message||"Guardado");$("btnVolver").click();
-  }catch(e){toast(e.message);}finally{$("btnGuardar").disabled=false;}
-}
-async function borrarDirecto(slug){
-  if(!confirm("¿Borrar definitivamente "+slug+".md?"))return;
-  try{const d=await api("/api/recurso",{method:"DELETE",body:JSON.stringify({slug})});toast(d.message||"Borrado");cargar();}catch(e){toast(e.message);}
-}
-async function borrarEditor(){
-  const slug=$("edSlug").value;
-  if(!slug||!confirm("¿Borrar definitivamente "+slug+".md?"))return;
-  $("btnBorrar").disabled=true;
-  try{const d=await api("/api/recurso",{method:"DELETE",body:JSON.stringify({slug})});toast(d.message||"Borrado");$("btnVolver").click();}catch(e){toast(e.message);}finally{$("btnBorrar").disabled=false;}
-}
-function volver(){$("editor").classList.add("hidden");$("panel").classList.remove("hidden");cargar();}
-
-$("btnNuevo").addEventListener("click",nuevo);
-$("btnCerrar").addEventListener("click",()=>location.href="/auth/logout");
-$("btnGuardar").addEventListener("click",guardar);
-$("btnBorrar").addEventListener("click",borrarEditor);
-$("btnVolver").addEventListener("click",volver);
-init();
-</script>
-</body>
-</html>`;
+function renderAdmin(env, url) {
+  const workerBase = url.origin;
+  return adminHtml.replaceAll("__WORKER_BASE__", workerBase);
 }

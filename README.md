@@ -1,8 +1,9 @@
 # Geo.Gráficas — Panel de administración
 
-Panel de administración del sitio Geo.Gráficas con **autenticación de Google**,
-servido por un **Cloudflare Worker** (plan gratuito). Permite crear, editar y
-borrar cuadernillos (`.md`) directamente contra el repo de GitLab, y GitLab
+Panel de administración del sitio Geo.Gráficas con **autenticación de Google**
+o **usuario/contraseña local**, servido por un **Cloudflare Worker** (plan
+gratuito) y también como página estática en GitLab Pages. Permite crear, editar
+y borrar cuadernillos (`.md`) directamente contra el repo de GitLab, y GitLab
 Pages vuelve a publicar automáticamente.
 
 ## Cómo funciona
@@ -16,9 +17,25 @@ Cloudflare Worker ──GR GitLab API──▶  repo geo-graficas-web ──pipe
 ```
 
 - El **frontend** (catálogo) sigue 100% en GitLab Pages, intacto.
-- Solo el **panel admin** vive en el Worker en el subdominio `admin.*`.
+- El **panel admin** vive en el Worker en el subdominio `admin.*`, con login por
+  Google o **usuario/contraseña local** (`admin`/`admin123`, verificado contra
+  hash PBKDF2 guardado en el código).
 - Login restringido a los emails definidos en `ADMIN_EMAILS`.
 - Cada guardado/borrado hace un commit a GitLab que dispara el pipeline Pages.
+
+## Publicar el panel también en GitLab Pages
+
+Además del Worker (que ya sirve el panel en su raíz), podés publicar una copia
+estática del panel en GitLab Pages para jugarla incluso si el Worker listo no
+está accesible o como respaldo:
+
+1. Configurá la variable de CI `GITLAB_PAGES_WORKER_BASE` con la URL pública del
+   Worker (ej: `https://geo-graficas-admin.<subdominio>.workers.dev`).
+2. El pipeline `.gitlab-ci.yml` genera `public/index.html` a partir de
+   `src/admin.html` reemplazando `__WORKER_BASE__` → el SPA apunta a la API del
+   Worker.
+3. El panel estático llama al Worker con credenciales (CORS); la cookie de
+   sesión se setea `SameSite=None; Secure` para flujos cross-origin.
 
 ## Requisitos
 
@@ -52,6 +69,24 @@ npx wrangler secret put GITLAB_PROJECT_ID      # ej: 85162233
 - `ADMIN_EMAILS`: los emails con acceso (separados por coma).
 - `SITE_URL`: la URL del sitio público (para CORS).
 - `CONTENT_PATH` / `DEFAULT_BRANCH`: ruta de los `.md` y rama (defaults: `src/content/recursos`, `main`).
+
+### 3b. Login local
+
+El panel acepta también `admin` / `admin123`. El hash PBKDF2-SHA256 (salt y hash
+en base64, sin la contraseña en claro) está en `src/index.js`. Para cambiarla,
+generá un nuevo hash, por ejemplo con Node:
+
+```bash
+node -e '
+const {webcrypto:crypto}=require("crypto");
+(async()=>{const s=crypto.getRandomValues(new Uint8Array(16));
+const k=await crypto.subtle.importKey("raw",new TextEncoder().encode("NUEVA_PASS"),"PBKDF2",false,["deriveBits"]);
+const b=await crypto.subtle.deriveBits({name:"PBKDF2",salt:s,iterations:100000,hash:"SHA-256"},k,256);
+console.log("SALT="+Buffer.from(s).toString("base64"));
+console.log("HASH="+Buffer.from(b).toString("base64"));})()'
+```
+
+Copiá esos valores a `LOCAL_SALT_B64` / `LOCAL_HASH_B64` en `src/index.js`.
 
 ### 4. Deploy
 
