@@ -210,10 +210,16 @@ async function borrarEditor(){
   try{const d=await api("/api/recurso",{method:"DELETE",body:JSON.stringify({slug})});toast(d.message||"Borrado");$("btnVolver").click();}catch(e){toast(e.message);}finally{$("btnBorrar").disabled=false;}
 }
 function volver(){$("editor").classList.add("hidden");$("panel").classList.remove("hidden");cargar();}
+async function cerrarSesion(){
+  // 1) cerrar la sesión interna del panel (cookie gg_session)
+  try{await fetch(WB+"/auth/logout",{credentials:"include"});}catch(e){}
+  // 2) ir al SSO y cerrar la sesión global (redirige al home de clientes.shcdigital.net.ar)
+  location.href = CLIENTES_URL+"/auth/logout";
+}
 
 $("btnNuevo").addEventListener("click",nuevo);
 $("btnSSO").addEventListener("click",()=>location.href=CLIENTES_URL);
-$("btnCerrar").addEventListener("click",()=>location.href=WB+"/auth/logout");
+$("btnCerrar").addEventListener("click",cerrarSesion);
 $("btnGuardar").addEventListener("click",guardar);
 $("btnBorrar").addEventListener("click",borrarEditor);
 $("btnVolver").addEventListener("click",volver);
