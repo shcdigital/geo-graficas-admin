@@ -60,6 +60,7 @@
   <div class="top">
     <h1>Panel de Geo.Gráficas</h1>
     <div class="row">
+      <button class="btn btn-ghost" id="btnSSO" style="margin-right:auto">← Panel de clientes</button>
       <button class="btn btn-primary hidden" id="btnNuevo">+ Nuevo cuadernillo</button>
       <button class="btn btn-ghost hidden" id="btnCerrar">Cerrar sesión</button>
     </div>
@@ -68,13 +69,9 @@
   <!-- Login -->
   <div class="card" id="loginCard">
     <h2>Acceso restringido</h2>
-    <p class="muted">Ingresá con tu cuenta de Google o con usuario y contraseña local.</p>
+    <p class="muted">El acceso se gestiona desde el panel de clientes de SHC Digital.</p>
 
-    <div class="row">
-      <button class="btn btn-primary" onclick="location.href=WB+'/auth/login'">Continuar con Google</button>
-    </div>
-
-    <div class="divider">o con contraseña</div>
+    <div class="divider">o ingreso local (prueba)</div>
 
     <div class="login-form">
       <div class="field"><label>Usuario</label><input type="text" id="locUser" autocomplete="username" /></div>
@@ -123,6 +120,7 @@
 // Cuando se sirve estático (GitLab Pages), se inyecta la URL del Worker.
 window.WORKER_BASE = "__WORKER_BASE__" || window.WORKER_BASE || "";
 const WB = window.WORKER_BASE;
+const CLIENTES_URL = "https://clientes.shcdigital.net.ar";
 const $=(id)=>document.getElementById(id);
 let sesion=null;
 
@@ -214,6 +212,7 @@ async function borrarEditor(){
 function volver(){$("editor").classList.add("hidden");$("panel").classList.remove("hidden");cargar();}
 
 $("btnNuevo").addEventListener("click",nuevo);
+$("btnSSO").addEventListener("click",()=>location.href=CLIENTES_URL);
 $("btnCerrar").addEventListener("click",()=>location.href=WB+"/auth/logout");
 $("btnGuardar").addEventListener("click",guardar);
 $("btnBorrar").addEventListener("click",borrarEditor);

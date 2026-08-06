@@ -1,13 +1,13 @@
 // geo-graficas-admin · Cloudflare Worker
 // Panel de administración de Geo.Gráficas.
-// - Login: Google OAuth2 (secrets) o local usuario/contraseña (PBKDF2, hash en el repo)
+// - Login: SSO vía clientes.shcdigital.net.ar (JWT firmado) o local (PBKDF2, hash en el repo)
 // - Sesiones en Workers KV
 // - CRUD de cuadernillos (.md) contra la API de GitLab
-// Se sirve en: admin.<tu-dominio>.com.ar (ruta Cloudflare Workers) y también
+// Se sirve en: <admin del cliente> (ruta Cloudflare Workers) y también
 // como página estática en GitLab Pages (apuntando a este Worker para la API).
 
 // ---------- Secrets requeridos (wrangler secret put) ----------
-// GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_REDIRECT_URI
+// SHARED_JWT_SECRET (idéntico al del Worker SSO de clientes)
 // GITLAB_TOKEN (token de proyecto con scope api) / GITLAB_PROJECT_ID
 
 // Login local: hash PBKDF2-SHA256 (100000 iter) de la contraseña + salt.
@@ -16,13 +16,10 @@ const LOCAL_USER = "admin";
 const LOCAL_SALT_B64 = "j+fjQHoDnbMq0a5Dlhrj6A==";
 const LOCAL_HASH_B64 = "UDJaznYt9Pv/+8Zbo1VzWhJ7xQVC0kX0uk6t0TxAZz0=";
 
-import adminHtml from "./admin.html?raw";
+import adminHtml from "./admin.txt?raw";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 const HTML_HEADERS = { "Content-Type": "text/html; charset=utf-8" };
-const GOOGLE_AUTH = "https://accounts.google.com/o/oauth2/v2/auth";
-const GOOGLE_TOKEN = "https://oauth2.googleapis.com/token";
-const GOOGLE_USERINFO = "https://www.googleapis.com/oauth2/v3/userinfo";
 
 export default {
   async fetch(request, env, ctx) {
@@ -38,9 +35,12 @@ export default {
       return new Response(renderAdmin(env, url), HTML_HEADERS);
     }
 
-    // OAuth Google
-    if (url.pathname === "/auth/login") return await redirectGoogle(env);
-    if (url.pathname === "/auth/callback") return await handleCallback(request, env, ctx);
+    // SSO: el Worker de clientes (clientes.shcdigital.net.ar) valida el login
+    // y redirige acá con un JWT firmado. Este Worker solo valida y abre sesión.
+    if (url.pathname === "/auth/sso" && request.method === "GET") {
+      return await ssoLogin(request, env, ctx);
+    }
+
     if (url.pathname === "/auth/logout") return await logout(request, env, origin);
     if (url.pathname === "/auth/me") return corsWrap(await me(request, env), env, origin);
 
@@ -78,52 +78,6 @@ function corsWrap(res, env, origin) {
 }
 
 // ---------- Login ----------
-async function redirectGoogle(env) {
-  const state = crypto.randomUUID();
-  await env.SESSIONS.put(`state:${state}`, "1", { expirationTtl: 600 });
-  const params = new URLSearchParams({
-    client_id: env.GOOGLE_CLIENT_ID,
-    redirect_uri: env.GOOGLE_REDIRECT_URI,
-    response_type: "code",
-    scope: "openid email profile",
-    state,
-    prompt: "select_account",
-  });
-  return Response.redirect(`${GOOGLE_AUTH}?${params}`, 302);
-}
-
-async function handleCallback(request, env, ctx) {
-  const url = new URL(request.url);
-  const code = url.searchParams.get("code");
-  const state = url.searchParams.get("state");
-  const stored = await env.SESSIONS.get(`state:${state}`);
-  if (!code || !stored) return new Response("Login inválido (state). Volvé a intentar.", { status: 400 });
-  await env.SESSIONS.delete(`state:${state}`);
-
-  const tokenResp = await fetch(GOOGLE_TOKEN, {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      code,
-      client_id: env.GOOGLE_CLIENT_ID,
-      client_secret: env.GOOGLE_CLIENT_SECRET,
-      redirect_uri: env.GOOGLE_REDIRECT_URI,
-      grant_type: "authorization_code",
-    }),
-  });
-  if (!tokenResp.ok) return new Response("Error obteniendo token de Google.", { status: 502 });
-  const tokenData = await tokenResp.json();
-
-  const userResp = await fetch(GOOGLE_USERINFO, { headers: { Authorization: `Bearer ${tokenData.access_token}` } });
-  const user = await userResp.json();
-
-  const allowed = (env.ADMIN_EMAILS || "").split(",").map((e) => e.trim().toLowerCase());
-  if (!allowed.includes((user.email || "").toLowerCase())) {
-    return new Response("Tu correo no tiene permiso para acceder al panel.", { status: 403 });
-  }
-  return makeSession(env, { email: user.email, name: user.name || user.email }, originOf(request));
-}
-
 async function loginLocal(request, env, origin) {
   let body;
   try { body = await request.json(); } catch { return json({ error: "Body inválido" }, 400); }
@@ -175,6 +129,61 @@ async function me(request, env) {
   if (!data) return json({ authed: false });
   const user = JSON.parse(data);
   return json({ authed: true, email: user.email, name: user.name });
+}
+
+// ---------- SSO (login desde clientes.shcdigital.net.ar) ----------
+// Quién lo emite: el Worker SSO (SHC Digital Clientes) con SHARED_JWT_SECRET.
+// Este endpoint valida firma + exp + tenant y abre la sesión interna del panel.
+async function ssoLogin(request, env, ctx) {
+  const token = new URL(request.url).searchParams.get("token");
+  if (!token) return new Response("Falta token", { status: 400, headers: HTML_HEADERS });
+
+  const secret = env.SHARED_JWT_SECRET;
+  if (!secret) return new Response("SSO no configurado (falta SHARED_JWT_SECRET)", { status: 503, headers: HTML_HEADERS });
+
+  const payload = await verifyJWT(token, secret);
+  if (!payload) return new Response("Token inválido o expirado", { status: 401, headers: HTML_HEADERS });
+
+  // El token debe pertenecer a ESTE panel (claim "tenant" = id del cliente)
+  const expected = env.TENANT_ID;
+  if (expected && payload.tenant !== expected) {
+    return new Response("Cliente no autorizado para este panel", { status: 403, headers: HTML_HEADERS });
+  }
+
+  const sessionId = crypto.randomUUID();
+  const user = { email: payload.sub || "cliente@local", name: payload.name || payload.sub || "Cliente" };
+  await env.SESSIONS.put(`session:${sessionId}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 12 });
+
+  const res = new Response(`<!doctype html><meta charset="utf-8"><script>window.location.href = "/";</script>`, {
+    headers: { "Content-Type": "text/html; charset=utf-8", "Set-Cookie": sessionCookie(sessionId) },
+  });
+  return res;
+}
+
+async function verifyJWT(token, secret) {
+  try {
+    const [h, b, s] = token.split(".");
+    if (!h || !b || !s) return null;
+    const enc = new TextEncoder();
+    const key = await crypto.subtle.importKey("raw", enc.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+    const data = enc.encode(`${h}.${b}`);
+    const sig = b64urlDecode(s);
+    const valid = await crypto.subtle.verify("HMAC", key, sig, data);
+    if (!valid) return null;
+    const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(b)));
+    if (payload.exp && payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch { return null; }
+}
+
+function b64urlDecode(s) {
+  const b64 = s.replace(/-/g, "+").replace(/_/g, "/").padEnd(Math.ceil(s.length / 4) * 4, "=");
+  const bin = atob(b64);
+  return Uint8Array.from(bin, (c) => c.charCodeAt(0));
+}
+
+function sessionCookie(sessionId) {
+  return `gg_session=${sessionId}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 12}`;
 }
 
 // ---------- API ----------

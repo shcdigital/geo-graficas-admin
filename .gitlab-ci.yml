@@ -8,7 +8,7 @@ pages:
   stage: deploy
   script:
     - mkdir -p public
-    - sed "s|__WORKER_BASE__|${GITLAB_PAGES_WORKER_BASE}|g" src/admin.html > public/index.html
+    - sed "s|__WORKER_BASE__|${GITLAB_PAGES_WORKER_BASE}|g" src/admin.txt > public/index.html
     - ls -la public
   artifacts:
     paths:

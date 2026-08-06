@@ -1,26 +1,30 @@
 # Geo.Gráficas — Panel de administración
 
-Panel de administración del sitio Geo.Gráficas con **autenticación de Google**
-o **usuario/contraseña local**, servido por un **Cloudflare Worker** (plan
-gratuito) y también como página estática en GitLab Pages. Permite crear, editar
-y borrar cuadernillos (`.md`) directamente contra el repo de GitLab, y GitLab
-Pages vuelve a publicar automáticamente.
+Panel de administración del sitio Geo.Gráficas con **login por SSO de SHC
+Digital** (`clientes.shcdigital.net.ar`, JWT firmado) o **usuario/contraseña
+local**, servido por un **Cloudflare Worker** (plan gratuito) y también como
+página estática en GitLab Pages. Permite crear, editar y borrar cuadernillos
+(`.md`) directamente contra el repo de GitLab, y GitLab Pages vuelve a
+publicar automáticamente.
 
 ## Cómo funciona
 
 ```
-[admin.<tu-dominio>.com.ar]  (Cloudflare Worker, gratis)
-      │  Google OAuth (client secret en el Worker)
+[clientes.shcdigital.net.ar]   (Worker SSO de SHC Digital — repo web)
+      │  welcome + login (local ahora / Google después)
+      │  email → TENANTS → JWT firmado
       ▼
-Cloudflare Worker ──GR GitLab API──▶  repo geo-graficas-web ──pipeline──▶  Pages
+[este Worker /auth/sso]   (valida JWT con SHARED_JWT_SECRET)
+      ▼  sesión KV + cookie
+ Cloudflare Worker ──GitLab API──▶  repo geo-graficas-web ──pipeline──▶  Pages
    sesiones en KV                          (crear/editar/borrar .md)
 ```
 
 - El **frontend** (catálogo) sigue 100% en GitLab Pages, intacto.
-- El **panel admin** vive en el Worker en el subdominio `admin.*`, con login por
-  Google o **usuario/contraseña local** (`admin`/`admin123`, verificado contra
-  hash PBKDF2 guardado en el código).
-- Login restringido a los emails definidos en `ADMIN_EMAILS`.
+- El **panel admin** abre sesión por **SSO** (el Worker de clientes valida el
+  login y redirige acá con un JWT) o por **usuario/contraseña local**
+  (`admin`/`admin123`, PBKDF2 en el código).
+- `TENANT_ID` debe coincidir con el `id` del tenant configurado en el SSO.
 - Cada guardado/borrado hace un commit a GitLab que dispara el pipeline Pages.
 
 ## Publicar el panel también en GitLab Pages
@@ -32,16 +36,18 @@ está accesible o como respaldo:
 1. Configurá la variable de CI `GITLAB_PAGES_WORKER_BASE` con la URL pública del
    Worker (ej: `https://geo-graficas-admin.<subdominio>.workers.dev`).
 2. El pipeline `.gitlab-ci.yml` genera `public/index.html` a partir de
-   `src/admin.html` reemplazando `__WORKER_BASE__` → el SPA apunta a la API del
+   `src/admin.txt` reemplazando `__WORKER_BASE__` → el SPA apunta a la API del
    Worker.
 3. El panel estático llama al Worker con credenciales (CORS); la cookie de
    sesión se setea `SameSite=None; Secure` para flujos cross-origin.
 
 ## Requisitos
 
-1. **Google**: un proyecto OAuth (consola de Google Cloud) con client ID/secret.
+1. **SSO**: un Worker de clientes (repo `web`, `clientes/`) con
+   `SHARED_JWT_SECRET` configurado.
 2. **Cloudflare**: una cuenta con Workers (plan gratuito) + acceso a los secrets.
 3. **GitLab**: un token de proyecto con scope `api` para el repo geo-gráficas-web.
+
 
 ## Configuración
 

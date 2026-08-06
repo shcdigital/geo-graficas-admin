@@ -11,6 +11,8 @@ id = "PENDIENTE_REEMPLAZAR_CON_KV_ID"
 [vars]
 APP_NAME = "Geo.Gráficas Admin"
 SITE_URL = "https://geo-graficas-web-d6a153.gitlab.io"
+# Id único de este cliente (debe coincidir con el "id" del tenant en el SSO de clientes)
+TENANT_ID = "geo-graficas"
 # Emails con acceso (separados por coma)
 ADMIN_EMAILS = "cambiar@ejemplo.com"
 # Ruta base de los cuadernillos en el repo
