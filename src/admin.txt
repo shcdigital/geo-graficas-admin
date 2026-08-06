@@ -91,6 +91,7 @@
     <div class="row">
       <button class="btn btn-ghost" id="btnSSO" style="margin-right:auto">← Panel de clientes</button>
       <button class="btn btn-primary hidden" id="btnNuevo">+ Nuevo cuadernillo</button>
+      <a class="btn btn-ghost hidden" id="btnSitio" href="https://geo-graficas-web-d6a153.gitlab.io" target="_blank" rel="noopener">Ver sitio</a>
       <button class="btn btn-ghost hidden" id="btnCerrar">Cerrar sesión</button>
     </div>
   </div>
@@ -295,6 +296,7 @@ async function init(){
     $("loginCard").classList.add("hidden");
     $("panel").classList.remove("hidden");
     $("btnNuevo").classList.remove("hidden");
+    $("btnSitio").classList.remove("hidden");
     $("btnCerrar").classList.remove("hidden");
     $("who").textContent="Conectado como "+sesion.email;
     cargar();
