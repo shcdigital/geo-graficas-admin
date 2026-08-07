@@ -1,22 +1,16 @@
 # Variables de desarrollo local para `npx wrangler dev`.
 # Copiá este archivo a `.dev.vars` y completalo con valores reales.
 # `.dev.vars` NO se comitea.
+# Las variables no secretas están en wrangler.toml [vars]; acá solo las que
+# requieren valor local/privado.
 
-# OAuth Google (probá con un proyecto de test o usá wrangler dev --remote)
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://127.0.0.1:8787/auth/callback
-
-# Token de proyecto GitLab (scope api) + id del repo geo-graficas-web
+# Token de proyecto GitLab (scope api). Debe tener acceso al repo geo-graficas-web
+# (GITLAB_PROJECT_ID) porque el panel lee y escribe cuadernillos, precios y materias.
 GITLAB_TOKEN=
-GITLAB_PROJECT_ID=85162233
 
-# Origen permitido en CORS (el sitio público que llama al Worker)
-SITE_URL=https://geo-graficas-web-d6a153.gitlab.io
-# Emails con acceso (separados por coma)
-ADMIN_EMAILS=
+# Secret compartido con el Worker SSO de clientes.shcdigital.net.ar.
+# Debe ser IDÉNTICO en ambos Workers o el login SSO rechaza el JWT.
+SHARED_JWT_SECRET=
 
 # API key de Resend: vive en el worker geo-graficas-pay (POST /email), no acá.
-# El panel solo configura el destinatario y la URL del worker pay.
-ADMIN_EMAIL=shcdigitalsolutions@gmail.com
-PAY_URL=https://geo-graficas-pay.pablo-berthold.workers.dev
+# El panel solo configura el destinatario (ADMIN_EMAIL en wrangler.toml) y la URL del worker pay.

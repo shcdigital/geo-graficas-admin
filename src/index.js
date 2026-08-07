@@ -85,19 +85,52 @@ function corsWrap(res, env, origin) {
 }
 
 // ---------- Login ----------
+const LOGIN_MAX = 5;              // intentos fallidos permitidos
+const LOGIN_WINDOW_SEC = 300;     // ventana de 5 minutos
+
+async function loginRateLimit(env, request) {
+  if (!env.SESSIONS) return null;
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const key = `ratelimit:${ip}`;
+  const raw = await env.SESSIONS.get(key);
+  const count = raw ? Number(raw) : 0;
+  if (count >= LOGIN_MAX) {
+    return json({ error: "Demasiados intentos. Probá de nuevo en unos minutos." }, 429);
+  }
+  return null;
+}
+
+async function recordLoginFail(env, request) {
+  if (!env.SESSIONS) return;
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  const key = `ratelimit:${ip}`;
+  const raw = await env.SESSIONS.get(key);
+  const count = raw ? Number(raw) : 0;
+  await env.SESSIONS.put(key, String(count + 1), { expirationTtl: LOGIN_WINDOW_SEC });
+}
+
+async function clearLoginFails(env, request) {
+  if (!env.SESSIONS) return;
+  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
+  await env.SESSIONS.delete(`ratelimit:${ip}`);
+}
+
 async function loginLocal(request, env, origin) {
+  const limited = await loginRateLimit(env, request);
+  if (limited) return limited;
   let body;
   try { body = await request.json(); } catch { return json({ error: "Body inválido" }, 400); }
   const user = String(body.user || "").trim();
   const pass = String(body.pass || "");
 
-  if (user !== LOCAL_USER) return json({ error: "Usuario o contraseña incorrectos" }, 401);
+  if (user !== LOCAL_USER) { await recordLoginFail(env, request); return json({ error: "Usuario o contraseña incorrectos" }, 401); }
 
   const salt = Uint8Array.from(atob(LOCAL_SALT_B64), (c) => c.charCodeAt(0));
   const expected = Uint8Array.from(atob(LOCAL_HASH_B64), (c) => c.charCodeAt(0));
   const derived = await pbkdf2(pass, salt);
-  if (!constantTimeEqual(derived, expected)) return json({ error: "Usuario o contraseña incorrectos" }, 401);
+  if (!constantTimeEqual(derived, expected)) { await recordLoginFail(env, request); return json({ error: "Usuario o contraseña incorrectos" }, 401); }
 
+  await clearLoginFails(env, request);
   return await makeSession(env, { email: `${LOCAL_USER}@local`, name: "Administrador local" }, origin);
 }
 
@@ -208,21 +241,24 @@ async function handleApi(request, env, ctx, url) {
   if (resource === "recurso" && request.method === "GET") {
     const slug = url.searchParams.get("slug");
     if (!slug) return json({ error: "Falta slug" }, 400);
+    if (!validSlug(slug)) return json({ error: "Slug inválido" }, 400);
     return json(await getRecurso(env, slug));
   }
   if (resource === "recurso" && (request.method === "POST" || request.method === "PUT")) {
     const body = await request.json();
+    if (!body || !validSlug(body.slug)) return json({ error: "Slug inválido" }, 400);
     const res = await saveRecurso(env, body);
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "recurso" && request.method === "DELETE") {
     const body = await request.json();
+    if (!body || !validSlug(body.slug)) return json({ error: "Slug inválido" }, 400);
     const res = await deleteRecurso(env, body);
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "imagen" && request.method === "POST") {
     const body = await request.json();
-    if (!body || !body.slug || !body.base64) return json({ error: "Faltan slug o base64" }, 400);
+    if (!body || !validSlug(body.slug) || !body.base64) return json({ error: "Faltan slug o base64" }, 400);
     const ext = String(body.ext || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     if (!IMG_ALLOWED_EXT.includes(ext)) return json({ error: "Formato de imagen no permitido (png/jpg/webp/gif)" }, 400);
     const res = await uploadImagen(env, { ...body, ext });
@@ -230,7 +266,7 @@ async function handleApi(request, env, ctx, url) {
   }
   if (resource === "imagen" && request.method === "DELETE") {
     const body = await request.json();
-    if (!body || !body.slug) return json({ error: "Falta slug" }, 400);
+    if (!body || !validSlug(body.slug)) return json({ error: "Falta slug" }, 400);
     const ext = String(body.ext || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     if (ext && !IMG_ALLOWED_EXT.includes(ext)) return json({ error: "Formato inválido" }, 400);
     const res = await deleteImagen(env, { slug: body.slug, ext });
@@ -514,6 +550,11 @@ function getSession(request) {
 
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), { status, headers: JSON_HEADERS });
+}
+
+const SLUG_RE = /^[a-z0-9-]{1,80}$/;
+function validSlug(s) {
+  return typeof s === "string" && SLUG_RE.test(s);
 }
 
 async function pbkdf2(password, salt) {

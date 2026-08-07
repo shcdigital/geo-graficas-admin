@@ -536,14 +536,14 @@ async function loginLocal(){
 async function cargar(){
   const data=await api("/api/recursos");
   const el=$("lista");
-  if(data.error){el.innerHTML='<p class="muted">Error: '+data.error+'</p>';return;}
+  if(data.error){el.innerHTML='<p class="muted">Error: '+esc(data.error)+'</p>';return;}
   el.innerHTML=(data||[]).map(r=>`
     <div class="rec">
-      <div class="name">${r.name}</div>
-      <div class="meta">${r.slug} · ${r.size||0} B</div>
+      <div class="name">${esc(r.name)}</div>
+      <div class="meta">${esc(r.slug)} · ${esc(r.size||0)} B</div>
       <div class="acts">
-        <button class="btn btn-ghost btn-sm" onclick="editar('${r.slug}')">Editar</button>
-        <button class="btn btn-danger btn-sm" onclick="borrarDirecto('${r.slug}')">Borrar</button>
+        <button class="btn btn-ghost btn-sm" onclick="editar('${jsStr(r.slug)}')">Editar</button>
+        <button class="btn btn-danger btn-sm" onclick="borrarDirecto('${jsStr(r.slug)}')">Borrar</button>
       </div>
     </div>`).join("")||'<p class="muted">No hay cuadernillos.</p>';
 }
@@ -552,6 +552,14 @@ async function cargar(){
 function slugFrom(str){
   return (str||"").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"")
     .replace(/[^a-z0-9]+/g,"-").replace(/(^-|-$)/g,"");
+}
+function esc(v){
+  return String(v==null?"":v)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+    .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+}
+function jsStr(v){
+  return String(v==null?"":v).replace(/\\/g,"\\\\").replace(/'/g,"\\'");
 }
 function quote(v){
   const s=String(v).trim();
