@@ -75,6 +75,11 @@
   .small{font-size:.78rem;margin:.3rem 0 0}
   .savebar{position:sticky;bottom:0;background:rgba(255,255,255,.92);backdrop-filter:blur(8px);border-top:1px solid var(--border);padding:.8rem 1rem;display:flex;justify-content:space-between;gap:1rem;align-items:center;margin-top:1rem;border-radius:var(--radius)}
   .actions{display:flex;gap:.75rem;flex-wrap:wrap;margin:1.5rem 0}
+  .prices-head{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+  .prices-head .btn{white-space:nowrap}
+  .prices-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:.75rem;margin-top:1rem}
+  .price-item{display:flex;flex-direction:column;gap:.3rem}
+  .price-item label{font-size:.8rem}
   #msg{position:fixed;bottom:1.2rem;left:50%;transform:translateX(-50%);background:#1a1a1a;color:#fff;padding:.6rem 1.2rem;border-radius:var(--radius-full);font-weight:500;font-size:.85rem;opacity:0;transition:.2s;pointer-events:none;z-index:50}
   #msg.show{opacity:1}
   .ok-popup{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) scale(.9);z-index:100;background:#fff;border-radius:var(--radius);box-shadow:0 20px 60px rgba(0,0,0,.35);padding:2rem 2.5rem;text-align:center;min-width:320px;max-width:92vw;opacity:0;pointer-events:none;transition:.25s ease;border-top:6px solid var(--gradient)}
@@ -120,6 +125,18 @@
   <!-- Panel -->
   <div class="hidden" id="panel">
     <p class="muted" id="who"></p>
+
+    <!-- Precios por categoría -->
+    <section class="card" id="pricesCard">
+      <div class="prices-head">
+        <h2>Precios por categoría</h2>
+        <button type="button" class="btn btn-primary" id="btnGuardarPrecios">Actualizar</button>
+      </div>
+      <p class="muted" id="pricesStatus">Cargando…</p>
+      <div class="prices-grid" id="pricesGrid"></div>
+      <p class="hint">Los cambios se guardan en el repo geo-graficas-pay y aplican al checkout cuando el worker se redespliegue (CI) y al sitio en el próximo build.</p>
+    </section>
+
     <div class="grid" id="lista"></div>
   </div>
 
@@ -178,9 +195,9 @@
           <input type="number" id="paginas" min="1" step="1" placeholder="46" />
         </div>
         <div class="field">
-          <label for="precio">Precio</label>
-          <input type="text" id="precio" placeholder="AR$ 4.500" />
-          <span class="hint">Vacío = "Consultar"</span>
+          <label for="precio">Categoría de precio</label>
+          <select id="precio"><option value="Consultar">Consultar</option></select>
+          <span class="hint" id="precio-hint">Seleccioná la categoría que define el precio de venta.</span>
         </div>
       </div>
     </section>
@@ -307,6 +324,89 @@ let palFrom="#f9ce34",palTo="#ee2a7b";
 const lists={unidad:[],incluye:[]};
 let imagenData=null;
 let imagenUrl="";
+const FALLBACK_PRICES={"Cat-A":1000,"Cat-B":4500,"Cat-C":8500,"Cat-D":12000,"Cat-E":15000,"Cat-F":20000,"Cat-G":25000,"Cat-H":30000,"Cat-I":40000,"Cat-J":50000};
+let precios=null;
+let preciosFuente="";
+function fmtARS(n){return new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0}).format(n);}
+
+async function cargarPrecios(){
+  precios=null;preciosFuente="";
+  try{
+    const d=await api("/api/prices");
+    precios=(d&&d.categories&&typeof d.categories==="object")?d.categories:null;
+    preciosFuente="live";
+  }catch(e){precios=null;}
+  if(!precios){precios=FALLBACK_PRICES;preciosFuente="local";}
+  renderPreciosGrid();
+  renderPreciosSelect();
+  updatePrecioHint();
+}
+
+function renderPreciosGrid(){
+  const g=$("pricesGrid");
+  if(!g)return;
+  g.innerHTML=Object.keys(precios).sort().map(k=>`
+    <div class="price-item">
+      <label for="price-${k}">${k}</label>
+      <input type="number" id="price-${k}" min="0" step="100" value="${Number(precios[k])||0}" />
+    </div>`).join("");
+  const st=$("pricesStatus");
+  if(st)st.textContent=preciosFuente==="live"
+    ?"Precios actuales del repo geo-graficas-pay."
+    :"No se pudieron leer los precios del repo (mostrando valores locales).";
+}
+
+function renderPreciosSelect(){
+  const sel=$("precio");
+  if(!sel)return;
+  const opts=[`<option value="Consultar">Consultar</option>`].concat(
+    Object.keys(precios).sort().map(k=>`<option value="${k}">${k} · ${fmtARS(Number(precios[k])||0)}</option>`)
+  );
+  sel.innerHTML=opts.join("");
+  if(sel.dataset.current)setPrecioSelect(sel.dataset.current);
+}
+
+function setPrecioSelect(v){
+  const sel=$("precio");
+  if(!sel)return;
+  sel.dataset.current=v;
+  const ok=[...sel.options].some(o=>o.value===v);
+  sel.value=ok?v:"Consultar";
+  updatePrecioHint();
+}
+
+function updatePrecioHint(){
+  const h=$("precio-hint");
+  if(!h)return;
+  const v=$("precio").value;
+  const p=precios&&precios[v];
+  h.textContent=v==="Consultar"
+    ?"Consultar: no se muestra precio, se pide por WhatsApp/IG."
+    :`Precio de venta: ${fmtARS(Number(p)||0)}.`;
+}
+
+async function guardarPrecios(){
+  const g=$("pricesGrid");
+  if(!g)return;
+  const categories={};
+  let bad=null;
+  Object.keys(precios).forEach((k)=>{
+    const inp=$("price-"+k);
+    const v=inp?Number(inp.value):NaN;
+    categories[k]=v;
+    if(!Number.isFinite(v)||v<0)bad=k;
+  });
+  if(bad){toast("Precio inválido en "+bad+" (número >= 0)");return;}
+  const btn=$("btnGuardarPrecios");
+  btn.disabled=true;btn.textContent="Actualizando…";
+  try{
+    const d=await api("/api/prices",{method:"PUT",body:JSON.stringify({categories})});
+    toast(d.message||"Precios actualizados");
+    await cargarPrecios();
+    okPopup("Precios actualizados","Se guardó en el repo geo-graficas-pay. Aplica al checkout cuando el worker se redespliegue (CI) y al sitio en el próximo build.");
+  }catch(e){toast(e.message||"No se pudieron actualizar los precios");}
+  finally{btn.disabled=false;btn.textContent="Actualizar";}
+}
 
 async function api(path, opts={}){
   const r=await fetch(WB+path,{credentials:"include",...opts,headers:{...((opts.headers)||{}),"Content-Type":"application/json"}});
@@ -335,6 +435,7 @@ async function init(){
     $("btnCerrar").classList.remove("hidden");
     $("who").textContent="Conectado como "+sesion.email;
     cargar();
+    cargarPrecios();
   }
 }
 
@@ -484,9 +585,10 @@ function stripQuotes(v){
 }
 
 function clearEditorFields(){
-  ["title","description","ciclo","asignatura","materia","paginas","precio","emoji","body","adminMsg"].forEach(id=>{const el=$(id);if(el)el.value="";});
+  ["title","description","ciclo","asignatura","materia","paginas","emoji","body","adminMsg"].forEach(id=>{const el=$(id);if(el)el.value="";});
   $("slug").value="";
   $("nivel").value="Secundaria";
+  setPrecioSelect("Consultar");
   $("destacado").checked=false;$("precioDestacado").checked=false;$("draft").checked=false;
   lists.unidad=[];lists.incluye=[];
   renderChips("unidad");renderChips("incluye");
@@ -546,7 +648,7 @@ function editar(slug){
     if(fm.asignatura!==undefined)$("asignatura").value=fm.asignatura;
     if(fm.materia!==undefined)$("materia").value=fm.materia;
     if(fm.paginas!==undefined)$("paginas").value=fm.paginas;
-    if(fm.precio!==undefined)$("precio").value=(fm.precio==="Consultar"?"":fm.precio);
+    if(fm.precio!==undefined)setPrecioSelect(fm.precio==="Consultar"?"Consultar":fm.precio);
     if(fm.pubDate!==undefined)$("pubDate").value=fm.pubDate;
     if(fm.emoji)$("emoji").value=fm.emoji;
     if(fm.coverFrom&&fm.coverTo)selectPalette(fm.coverFrom,fm.coverTo);
@@ -628,6 +730,8 @@ function finishAdd(name){
 }
 
 $("btnNuevo").addEventListener("click",nuevo);
+$("btnGuardarPrecios").addEventListener("click",guardarPrecios);
+$("precio").addEventListener("change",updatePrecioHint);
 $("btnSSO").addEventListener("click",()=>location.href=CLIENTES_URL);
 $("btnCerrar").addEventListener("click",()=>{
   try{fetch(WB+"/auth/logout",{credentials:"include"});}catch(e){}

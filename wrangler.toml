@@ -27,6 +27,12 @@ IMG_PATH = "public/img/recursos"
 DEFAULT_BRANCH = "main"
 # Proyecto GitLab donde vive el contenido (geo-graficas-web)
 GITLAB_PROJECT_ID = "85162233"
+# Proyecto GitLab donde vive el archivo de precios (geo-graficas-pay).
+# SECRET requerido: GITLAB_PAY_TOKEN = token de PROYECTO (scope api) del repo pay.
+# Se carga con: npx wrangler secret put GITLAB_PAY_TOKEN
+GITLAB_PAY_PROJECT = "pabloberthold/geo-graficas-pay"
+GITLAB_PAY_BRANCH = "master"
+PRICES_PATH = "data/products.json"
 
 # Rutas del sitio público (para anclas/links)
 [observability]

@@ -226,6 +226,15 @@ async function handleApi(request, env, ctx, url) {
     const res = await deleteImagen(env, { slug: body.slug, ext });
     return json(res, res.ok ? 200 : 400);
   }
+  if (resource === "prices" && request.method === "GET") return json(await getPrices(env));
+  if (resource === "prices" && request.method === "PUT") {
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body.categories !== "object" || body.categories === null) {
+      return json({ error: "Falta categorías" }, 400);
+    }
+    const res = await savePrices(env, body.categories);
+    return json(res, res.ok ? 200 : 400);
+  }
   return json({ error: "Ruta no encontrada" }, 404);
 }
 
@@ -335,6 +344,80 @@ async function deleteRecurso(env, { slug, message }) {
     body: JSON.stringify({ branch: env.DEFAULT_BRANCH, commit_message: message || `Eliminar ${slug}.md` }),
   });
   return { ok: res.ok, message: res.ok ? "Eliminado" : `GitLab: ${res.data?.message || res.status}` };
+}
+
+// ---------- Precios (repo pay, mismo patrón que los cuadernillos) ----------
+// El archivo de precios vive en geo-graficas-pay (data/products.json), la
+// fuente de verdad que cobra el checkout. El panel lo lee y escribe con un
+// token de proyecto scoped al repo pay (GITLAB_PAY_TOKEN, secret).
+function glPayHeaders(env) {
+  return { "PRIVATE-TOKEN": env.GITLAB_PAY_TOKEN, "Content-Type": "application/json" };
+}
+
+function glPayProject(env) {
+  return encodeURIComponent(env.GITLAB_PAY_PROJECT || "");
+}
+
+function glPayBranch(env) {
+  return encodeURIComponent(env.GITLAB_PAY_BRANCH || "master");
+}
+
+function pricesFilePath(env) {
+  return env.PRICES_PATH || "data/products.json";
+}
+
+async function glPayFetch(env, path, opts = {}) {
+  const url = `https://gitlab.com/api/v4/projects/${glPayProject(env)}${path}`;
+  const res = await fetch(url, { ...opts, headers: { ...glPayHeaders(env), ...(opts.headers || {}) } });
+  const text = await res.text();
+  let data;
+  try { data = JSON.parse(text); } catch { data = text; }
+  return { ok: res.ok, status: res.status, data };
+}
+
+function validPrices(categories) {
+  const out = {};
+  for (const [k, v] of Object.entries(categories)) {
+    const key = String(k);
+    if (!/^Cat-[A-Z]$/.test(key)) return null;
+    const num = Number(v);
+    if (!Number.isFinite(num) || num < 0) return null;
+    out[key] = Math.round(num);
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+async function getPrices(env) {
+  const filePath = pricesFilePath(env);
+  const res = await glPayFetch(env, `/repository/files/${encodeURIComponent(filePath)}/raw?ref=${glPayBranch(env)}`);
+  if (!res.ok) return { error: `GitLab pay: ${res.data?.message || res.status}` };
+  let parsed;
+  try { parsed = JSON.parse(res.data); } catch { return { error: "El archivo de precios no es JSON válido" }; }
+  if (!parsed || typeof parsed.categories !== "object" || parsed.categories === null) {
+    return { error: "Estructura inesperada en el archivo de precios" };
+  }
+  return { categories: parsed.categories };
+}
+
+async function savePrices(env, categories) {
+  const clean = validPrices(categories);
+  if (!clean) {
+    return { ok: false, message: "Datos de precios inválidos (solo Cat-A..Cat-J con precios numéricos >= 0)" };
+  }
+  const filePath = pricesFilePath(env);
+  const existing = await glPayFetch(env, `/repository/files/${encodeURIComponent(filePath)}?ref=${glPayBranch(env)}`);
+  const isUpdate = existing.ok;
+  const body = {
+    branch: env.GITLAB_PAY_BRANCH || "master",
+    content: JSON.stringify({ categories: clean }, null, 2) + "\n",
+    commit_message: isUpdate ? "Actualizar precios desde panel" : "Crear archivo de precios desde panel",
+  };
+  if (isUpdate) body.last_commit_id = existing.data?.last_commit_id;
+  const res = await glPayFetch(env, `/repository/files/${encodeURIComponent(filePath)}`, {
+    method: isUpdate ? "PUT" : "POST",
+    body: JSON.stringify(body),
+  });
+  return { ok: res.ok, message: res.ok ? "Precios actualizados" : `GitLab: ${res.data?.message || res.status}` };
 }
 
 // ---------- Utilidades ----------
