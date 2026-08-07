@@ -245,6 +245,7 @@ async function handleApi(request, env, ctx, url) {
     const res = await savePrices(env, body.categories);
     return json(res, res.ok ? 200 : 400);
   }
+  if (resource === "materias" && request.method === "GET") return json(await getMaterias(env));
   if (resource === "mensaje" && request.method === "POST") {
     const body = await request.json().catch(() => null);
     const res = await sendMensaje(env, session, body);
@@ -430,6 +431,28 @@ async function getPrices(env) {
 
 function safeJson(text) {
   try { return JSON.parse(text); } catch { return null; }
+}
+
+// ---------- Materias (repo geo-graficas-web, archivo canónico) ----------
+// La lista de materias vive en geo-graficas-web (src/data/materias.json) y es
+// la fuente única de verdad: la web la usa para el filtro y la portada, y acá
+// alimenta el desplegable del editor. Se lee con el mismo GITLAB_TOKEN.
+function materiasFilePath(env) {
+  return env.MATERIAS_PATH || "src/data/materias.json";
+}
+
+async function getMaterias(env) {
+  const filePath = materiasFilePath(env);
+  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}/raw?ref=${env.DEFAULT_BRANCH}`);
+  if (!res.ok) return { error: `GitLab: ${res.data?.message || res.status}` };
+  const parsed = typeof res.data === "string" ? safeJson(res.data) : res.data;
+  if (!parsed || !Array.isArray(parsed.materias)) {
+    return { error: "Estructura inesperada en el archivo de materias" };
+  }
+  const materias = parsed.materias
+    .filter((m) => m && typeof m.materia === "string" && typeof m.emoji === "string")
+    .map((m) => ({ materia: m.materia, emoji: m.emoji }));
+  return { materias };
 }
 
 async function savePrices(env, categories) {

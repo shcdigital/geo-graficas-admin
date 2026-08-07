@@ -194,7 +194,9 @@
         </div>
         <div class="field">
           <label for="materia">Materia *</label>
-          <input type="text" id="materia" placeholder="Funciones" />
+          <select id="materia">
+            <option value="">Seleccioná una materia…</option>
+          </select>
         </div>
         <div class="field">
           <label for="paginas">Páginas * <span class="hint">(entero mayor a 0)</span></label>
@@ -356,6 +358,18 @@ let imagenUrl="";
 const FALLBACK_PRICES={"Cat-A":999,"Cat-B":4499,"Cat-C":8499,"Cat-D":1200,"Cat-E":1500,"Cat-F":2999,"Cat-G":2599,"Cat-H":3499,"Cat-I":4999,"Cat-J":5999};
 let precios=null;
 let preciosFuente="";
+const FALLBACK_MATERIAS=[
+  {materia:"Matemática",emoji:"🧮"},
+  {materia:"Lengua y Literatura",emoji:"📚"},
+  {materia:"Historia",emoji:"📜"},
+  {materia:"Ciencias Naturales",emoji:"🔬"},
+  {materia:"Geografía",emoji:"🌍"},
+  {materia:"Escritura",emoji:"✏️"},
+  {materia:"Datos y Estadística",emoji:"📊"},
+  {materia:"Laboratorio",emoji:"🧪"},
+];
+let materias=FALLBACK_MATERIAS;
+let materiasFuente="local";
 function fmtARS(n){return new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0}).format(n);}
 
 async function cargarPrecios(){
@@ -369,6 +383,44 @@ async function cargarPrecios(){
   renderPreciosGrid();
   renderPreciosSelect();
   updatePrecioHint();
+}
+
+async function cargarMaterias(){
+  materias=FALLBACK_MATERIAS;materiasFuente="local";
+  try{
+    const d=await api("/api/materias");
+    if(d&&Array.isArray(d.materias)&&d.materias.length){
+      materias=d.materias;
+      materiasFuente="live";
+    }
+  }catch(e){/* fallback local */}
+  renderMateriasSelect();
+}
+
+function renderMateriasSelect(){
+  const sel=$("materia");
+  if(!sel)return;
+  const opts=[`<option value="">Seleccioná una materia…</option>`].concat(
+    materias.map(m=>`<option value="${m.materia}">${m.emoji} ${m.materia}</option>`)
+  );
+  sel.innerHTML=opts.join("");
+  if(sel.dataset.current)setMateria(sel.dataset.current);
+}
+
+function setMateria(v){
+  const sel=$("materia");
+  if(!sel)return;
+  sel.dataset.current=v||"";
+  const ok=[...sel.options].some(o=>o.value===v);
+  if(!ok&&v)sel.insertAdjacentHTML("beforeend",`<option value="${v}">${v}</option>`);
+  sel.value=ok?v:"";
+  syncEmojiFromMateria();
+}
+
+function syncEmojiFromMateria(){
+  const m=materias.find(x=>x.materia===$val("materia"));
+  if(m)$("emoji").value=m.emoji;
+  updatePreview();
 }
 
 function renderPreciosGrid(){
@@ -466,6 +518,7 @@ async function init(){
     $("who").textContent="Conectado como "+sesion.email;
     cargar();
     cargarPrecios();
+    cargarMaterias();
   }
 }
 
@@ -634,6 +687,7 @@ function stripQuotes(v){
 
 function clearEditorFields(){
   ["title","description","ciclo","asignatura","materia","paginas","emoji","body"].forEach(id=>{const el=$(id);if(el)el.value="";});
+  if($("materia"))delete $("materia").dataset.current;
   $("slug").value="";
   $("nivel").value="Secundaria";
   setPrecioSelect("Consultar");
@@ -694,7 +748,7 @@ function editar(slug){
     if(fm.nivel)$("nivel").value=fm.nivel;
     if(fm.ciclo!==undefined)$("ciclo").value=fm.ciclo;
     if(fm.asignatura!==undefined)$("asignatura").value=fm.asignatura;
-    if(fm.materia!==undefined)$("materia").value=fm.materia;
+    if(fm.materia!==undefined)setMateria(fm.materia);
     if(fm.paginas!==undefined)$("paginas").value=fm.paginas;
     if(fm.precio!==undefined)setPrecioSelect(fm.precio==="Consultar"?"Consultar":fm.precio);
     if(fm.pubDate!==undefined)$("pubDate").value=fm.pubDate;
@@ -862,6 +916,7 @@ async function enviarMensaje(){
 $("btnLocal").addEventListener("click",loginLocal);
 $("locPass").addEventListener("keydown",(e)=>{if(e.key==="Enter")loginLocal();});
 ["emoji","materia","destacado"].forEach(id=>$(id).addEventListener("change",updatePreview));
+$("materia").addEventListener("change",syncEmojiFromMateria);
 
 $("portadaFile").addEventListener("change",(e)=>{
   const file=e.target.files && e.target.files[0];

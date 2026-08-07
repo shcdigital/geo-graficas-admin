@@ -7,8 +7,11 @@ estática en GitLab Pages. Permite:
 - **CRUD de cuadernillos** (`.md`) directamente contra el repo `geo-graficas-web`
   vía GitLab API; el pipeline de Pages republica automáticamente.
 - **Editor de precios**: card "Precios por categoría" que lee/escribe
-  `data/products.json` del repo `geo-graficas-pay`; la CI del pay re-despliega
-  el worker y los precios nuevos aplican al checkout.
+  `src/data/prices.json` del repo `geo-graficas-web` (fuente única; el worker
+  `geo-graficas-pay` la baja al desplegar).
+- **Dropdown de materia con emoji** en el formulario de edición: el campo
+  Materia es un desplegable alimentado por `src/data/materias.json` del repo
+  web. Al elegir una materia se autocompleta el emoji de portada.
 - **Dropdown de categoría con precio** en el formulario de edición (ej.
   `Cat-B · $4.500`).
 - **Enviar mensaje al administrador**: botón en el panel principal → formulario
@@ -25,7 +28,7 @@ estática en GitLab Pages. Permite:
 [este Worker /auth/sso]  ── sesión KV + cookie (SameSite=None; Secure)
       ▼
  Cloudflare Worker ──GitLab API──▶  repo geo-graficas-web  (cuadernillos .md)
-                        ──GitLab API──▶  repo geo-graficas-pay (precios)
+                        ──GitLab API──▶  repo geo-graficas-web (precios, materias)
 ```
 
 - **Frontend** (catálogo) sigue 100% en GitLab Pages, intacto.
@@ -63,8 +66,11 @@ npx wrangler secret put GITLAB_PAY_TOKEN    # token scope api del repo pay (rama
 - `SITE_URL`: dominio público del sitio (botón "Ver sitio").
 - `CLIENTES_URL`: base del panel de clientes/SSO.
 - `TENANT_ID` / `ADMIN_EMAILS`: tenant y emails con acceso.
-- `GITLAB_PROJECT_ID`: id del repo web (contenido).
-- `GITLAB_PAY_PROJECT` / `GITLAB_PAY_BRANCH` / `PRICES_PATH`: repo pay de precios.
+- `GITLAB_PROJECT_ID`: id del repo web (contenido, precios y materias).
+- `GITLAB_PAY_PROJECT` / `GITLAB_PAY_BRANCH` / `PRICES_PATH`: repo pay de precios
+  (legacy; los precios canónicos ahora viven en `src/data/prices.json` del web).
+- `MATERIAS_PATH`: ruta del archivo de materias en el repo web (default
+  `src/data/materias.json`).
 - `ADMIN_EMAIL`: destinatario del botón "Enviar mensaje" (default
   `shcdigitalsolutions@gmail.com`).
 - `PAY_URL`: URL del worker `geo-graficas-pay` (default
