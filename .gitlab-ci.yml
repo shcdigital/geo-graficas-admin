@@ -25,6 +25,7 @@ pages:
 
 deploy-worker:
   stage: deploy
+  image: node:22-alpine
   script:
     - npm ci --cache .npm --no-audit --no-fund
     - npm run deploy
