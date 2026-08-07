@@ -15,3 +15,8 @@ GITLAB_PROJECT_ID=85162233
 SITE_URL=https://geo-graficas-web-d6a153.gitlab.io
 # Emails con acceso (separados por coma)
 ADMIN_EMAILS=
+
+# API key de Resend: vive en el worker geo-graficas-pay (POST /email), no acá.
+# El panel solo configura el destinatario y la URL del worker pay.
+ADMIN_EMAIL=shcdigitalsolutions@gmail.com
+PAY_URL=https://geo-graficas-pay.pablo-berthold.workers.dev

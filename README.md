@@ -11,6 +11,10 @@ estática en GitLab Pages. Permite:
   el worker y los precios nuevos aplican al checkout.
 - **Dropdown de categoría con precio** en el formulario de edición (ej.
   `Cat-B · $4.500`).
+- **Enviar mensaje al administrador**: botón en el panel principal → formulario
+  Asunto + Mensaje que envía un correo vía **Resend** a `ADMIN_EMAIL`. El envío
+  lo hace el worker `geo-graficas-pay` (`POST /email`), que ya posee la
+  `RESEND_API_KEY`; este panel no guarda la key.
 
 ## Cómo funciona
 
@@ -50,6 +54,9 @@ npx wrangler secret put GITLAB_PAY_TOKEN    # token scope api del repo pay (rama
 
 > `GITLAB_PAY_TOKEN` es **proyecto-scoped al repo pay** (mínimo privilegio). El
 > editor de precios no funciona sin él (`GET/PUT /api/prices` devuelve 401).
+> La `RESEND_API_KEY` (para el botón "Enviar mensaje") **no** se define acá: el
+> panel delega el envío al worker `geo-graficas-pay` (ruta `POST /email`), que
+> ya la tiene como secret.
 
 ### 3. Vars en `wrangler.toml`
 
@@ -58,6 +65,11 @@ npx wrangler secret put GITLAB_PAY_TOKEN    # token scope api del repo pay (rama
 - `TENANT_ID` / `ADMIN_EMAILS`: tenant y emails con acceso.
 - `GITLAB_PROJECT_ID`: id del repo web (contenido).
 - `GITLAB_PAY_PROJECT` / `GITLAB_PAY_BRANCH` / `PRICES_PATH`: repo pay de precios.
+- `ADMIN_EMAIL`: destinatario del botón "Enviar mensaje" (default
+  `shcdigitalsolutions@gmail.com`).
+- `PAY_URL`: URL del worker `geo-graficas-pay` (default
+  `https://geo-graficas-pay.pablo-berthold.workers.dev`); es quien envía el mail
+  con su `RESEND_API_KEY`.
 - `CONTENT_PATH` / `IMG_PATH` / `DEFAULT_BRANCH`: rutas de los `.md` e imágenes.
 
 ### 4. Deploy

@@ -235,6 +235,11 @@ async function handleApi(request, env, ctx, url) {
     const res = await savePrices(env, body.categories);
     return json(res, res.ok ? 200 : 400);
   }
+  if (resource === "mensaje" && request.method === "POST") {
+    const body = await request.json().catch(() => null);
+    const res = await sendMensaje(env, session, body);
+    return json(res, res.ok ? 200 : 400);
+  }
   return json({ error: "Ruta no encontrada" }, 404);
 }
 
@@ -418,6 +423,35 @@ async function savePrices(env, categories) {
     body: JSON.stringify(body),
   });
   return { ok: res.ok, message: res.ok ? "Precios actualizados" : `GitLab: ${res.data?.message || res.status}` };
+}
+
+// ---------- Mensaje al administrador (delegado al worker geo-graficas-pay) ----------
+// El worker pay ya tiene el secret RESEND_API_KEY; este worker solo le pide
+// que mande el mail, sin duplicar la key en el panel.
+async function sendMensaje(env, session, body) {
+  const asunto = String((body && body.asunto) || "").trim();
+  const mensaje = String((body && body.mensaje) || "").trim();
+  if (!asunto || !mensaje) return { ok: false, message: "Faltan asunto y mensaje" };
+
+  const to = env.ADMIN_EMAIL || "shcdigitalsolutions@gmail.com";
+  const payUrl = (env.PAY_URL || "https://geo-graficas-pay.pablo-berthold.workers.dev").replace(/\/+$/, "");
+  const cliente = session && (session.name || session.email)
+    ? `${session.name || "Cliente"} <${session.email || ""}>`
+    : "Sin sesión";
+  const text = `${mensaje}\n\n— Enviado desde el panel de administración de Geo.Gráficas\n• Cliente: ${cliente}\n• Sitio: ${env.SITE_URL || ""}`;
+
+  const res = await fetch(`${payUrl}/email`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      to,
+      subject: `[Panel Geo.Gráficas] ${asunto}`,
+      text,
+    }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, message: data.error || `Pay: ${res.status}` };
+  return { ok: true, message: data.message || "Enviado" };
 }
 
 // ---------- Utilidades ----------

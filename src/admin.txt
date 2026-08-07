@@ -30,6 +30,7 @@
   .btn-ghost{background:#fff;border:1px solid var(--border);color:var(--text)}
   .btn-danger{background:var(--red);color:#fff}
   .btn-sm{padding:.4rem .9rem;font-size:.8rem}
+  .btn svg{vertical-align:-2px;margin-right:.35rem}
   .btn:disabled{opacity:.6;cursor:not-allowed}
   .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1.5rem;box-shadow:0 1px 2px rgba(17,24,39,.06)}
   .card h2{font-size:1.1rem;padding-bottom:.75rem;border-bottom:1px solid var(--border);margin:0 0 1.25rem}
@@ -67,9 +68,10 @@
   .palette.selected{border-color:var(--brand-mid);font-weight:600}
   .palette .swatch{width:100%;height:14px;border-radius:6px}
   .preview-media{position:relative;display:grid;place-items:center;aspect-ratio:4/3;border-radius:var(--radius);overflow:hidden;border:1px solid var(--border)}
+  .preview-media .preview-img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:1}
   .preview-media .emoji{font-size:3rem;filter:drop-shadow(0 4px 8px rgba(0,0,0,.18))}
-  .preview-media .materia{position:absolute;left:.75rem;bottom:.75rem;color:#fff;font-weight:600;font-size:.875rem;text-shadow:0 1px 3px rgba(0,0,0,.4)}
-  .preview-chip{position:absolute;top:.75rem;right:.75rem;padding:.25rem .65rem;font-size:.7rem;font-weight:700;color:#fff;border-radius:var(--radius-full);background:var(--gradient)}
+  .preview-media .materia{position:absolute;left:.75rem;bottom:.75rem;color:#fff;font-weight:600;font-size:.875rem;text-shadow:0 1px 3px rgba(0,0,0,.4);z-index:2}
+  .preview-chip{position:absolute;top:.75rem;right:.75rem;padding:.25rem .65rem;font-size:.7rem;font-weight:700;color:#fff;border-radius:var(--radius-full);background:var(--gradient);z-index:2}
   .imagen-row{display:flex;align-items:center;gap:.75rem;margin-top:.5rem}
   .imagen-preview{width:100%;max-height:220px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border)}
   .small{font-size:.78rem;margin:.3rem 0 0}
@@ -104,6 +106,7 @@
     <div class="row">
       <button class="btn btn-ghost" id="btnSSO" style="margin-right:auto">← Panel de clientes</button>
       <button class="btn btn-primary hidden" id="btnNuevo">+ Nuevo cuadernillo</button>
+      <button class="btn btn-ghost hidden" id="btnMensaje">✉ Enviar mensaje</button>
       <a class="btn btn-ghost hidden" id="btnSitio" href="__SITE_URL__" target="_blank" rel="noopener">Ver sitio</a>
       <button class="btn btn-ghost hidden" id="btnCerrar">Cerrar sesión</button>
       <button type="button" class="btn btn-ghost hidden" id="btnVolverTop">← Volver</button>
@@ -269,12 +272,16 @@
           <p class="muted small">Si no subís imagen, se usa el degradado + emoji.</p>
           <div class="imagen-row" id="portadaRow" hidden>
             <img class="imagen-preview" id="portadaPreview" alt="Portada" />
-            <button type="button" class="btn btn-ghost btn-sm" id="btnQuitarPortada">Quitar imagen</button>
+            <button type="button" class="btn btn-ghost btn-sm" id="btnQuitarPortada">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
+              Quitar imagen
+            </button>
           </div>
         </div>
         <div class="field">
           <label>Vista previa</label>
           <div class="preview-media" id="preview" style="background:linear-gradient(135deg,#f9ce34,#ee2a7b)">
+            <img class="preview-img" id="preview-imagen" alt="Portada" hidden />
             <span class="preview-chip" hidden>Destacado</span>
             <span class="emoji" id="preview-emoji">📘</span>
             <span class="materia" id="preview-materia">—</span>
@@ -289,10 +296,6 @@
       <div class="field full">
         <textarea id="body" rows="4" placeholder="Descripción larga en Markdown para la página de detalle."></textarea>
       </div>
-      <div class="field full">
-        <label for="adminMsg">Mensaje al administrador</label>
-        <textarea id="adminMsg" rows="3" placeholder="Nota interna para el administrador (no se muestra en el sitio). Ej: revisar precio, fuente de los datos, etc."></textarea>
-      </div>
     </section>
 
     <div class="actions">
@@ -301,6 +304,25 @@
       <button type="button" class="btn btn-danger hidden" id="btnBorrar">Borrar cuadernillo</button>
       <button type="button" class="btn btn-ghost" id="btnVolver" style="margin-left:auto">Volver</button>
     </div>
+  </div>
+
+  <!-- Mensaje al administrador -->
+  <div class="hidden" id="mensajeView">
+    <section class="card">
+      <h2>Enviar mensaje al administrador</h2>
+      <div class="field full">
+        <label for="msgAsunto">Asunto *</label>
+        <input type="text" id="msgAsunto" placeholder="Ej: Pedido de cambio de precios" />
+      </div>
+      <div class="field full">
+        <label for="msgTexto">Mensaje *</label>
+        <textarea id="msgTexto" rows="5" placeholder="Escribí el mensaje para el administrador."></textarea>
+      </div>
+      <div class="row">
+        <button type="button" class="btn btn-primary" id="btnEnviarMsg">Enviar</button>
+        <button type="button" class="btn btn-ghost" id="btnVolverMsg">Volver</button>
+      </div>
+    </section>
   </div>
 </div>
 
@@ -324,7 +346,7 @@ let palFrom="#f9ce34",palTo="#ee2a7b";
 const lists={unidad:[],incluye:[]};
 let imagenData=null;
 let imagenUrl="";
-const FALLBACK_PRICES={"Cat-A":1000,"Cat-B":4500,"Cat-C":8500,"Cat-D":12000,"Cat-E":15000,"Cat-F":20000,"Cat-G":25000,"Cat-H":30000,"Cat-I":40000,"Cat-J":50000};
+const FALLBACK_PRICES={"Cat-A":999,"Cat-B":4499,"Cat-C":8499,"Cat-D":1200,"Cat-E":1500,"Cat-F":2999,"Cat-G":2599,"Cat-H":3499,"Cat-I":4999,"Cat-J":5999};
 let precios=null;
 let preciosFuente="";
 function fmtARS(n){return new Intl.NumberFormat("es-AR",{style:"currency",currency:"ARS",minimumFractionDigits:0}).format(n);}
@@ -431,6 +453,7 @@ async function init(){
     $("loginCard").classList.add("hidden");
     $("panel").classList.remove("hidden");
     $("btnNuevo").classList.remove("hidden");
+    $("btnMensaje").classList.remove("hidden");
     $("btnSitio").classList.remove("hidden");
     $("btnCerrar").classList.remove("hidden");
     $("who").textContent="Conectado como "+sesion.email;
@@ -491,6 +514,18 @@ function renderChips(name){
 
 function updatePreview(){
   const media=$("preview");
+  const img=$("preview-imagen");
+  if(imagenData){
+    img.src="data:image/"+imagenData.ext+";base64,"+imagenData.base64;
+    img.hidden=false;
+  }else if(imagenUrl){
+    img.src=imagenUrl;
+    img.hidden=false;
+  }else{
+    img.removeAttribute("src");
+    img.hidden=true;
+  }
+  $("preview-emoji").hidden=!img.hidden;
   media.style.background=`linear-gradient(135deg, ${palFrom}, ${palTo})`;
   $("preview-emoji").textContent=$val("emoji")||"📘";
   $("preview-materia").textContent=$val("materia")||"—";
@@ -561,7 +596,7 @@ async function subir(){
       imagenData=null;
     }
     const md=buildMarkdown();
-    const msg=$val("adminMsg")||(editandoSlug?`Actualizar ${slug}.md`:`Crear ${slug}.md`);
+    const msg=editandoSlug?`Actualizar ${slug}.md`:`Crear ${slug}.md`;
     const d=await api("/api/recurso",{method:"POST",body:JSON.stringify({slug,content:md,message:msg})});
     if(d.ok||d.message){
       if(editandoSlug)okPopup("Cambios guardados","Se actualizó “"+$("title").value.trim()+"”. Se verá reflejado en el sitio en unos minutos.");
@@ -585,7 +620,7 @@ function stripQuotes(v){
 }
 
 function clearEditorFields(){
-  ["title","description","ciclo","asignatura","materia","paginas","emoji","body","adminMsg"].forEach(id=>{const el=$(id);if(el)el.value="";});
+  ["title","description","ciclo","asignatura","materia","paginas","emoji","body"].forEach(id=>{const el=$(id);if(el)el.value="";});
   $("slug").value="";
   $("nivel").value="Secundaria";
   setPrecioSelect("Consultar");
@@ -598,7 +633,7 @@ function clearEditorFields(){
   $("topTitle").textContent="Editar cuadernillo";
   imagenData=null;imagenUrl="";
   $("portadaFile").value="";
-  $("portadaRow").hidden=true;
+  mostrarPortada();
 }
 
 function mostrarEditor(titulo){
@@ -684,10 +719,12 @@ function nuevo(){
 function clearEditor(){ clearEditorFields(); }
 
 function volver(){
+  if(!$("mensajeView").classList.contains("hidden")){volverMensaje();return;}
   $("editor").classList.add("hidden");
   $("panel").classList.remove("hidden");
   $("btnVolverTop").classList.add("hidden");
   $("btnNuevo").classList.remove("hidden");
+  $("btnMensaje").classList.remove("hidden");
   editandoSlug=null;
   cargar();
 }
@@ -742,6 +779,47 @@ $("btnLimpiar").addEventListener("click",clearEditor);
 $("btnBorrar").addEventListener("click",borrarEditor);
 $("btnVolver").addEventListener("click",volver);
 $("btnVolverTop").addEventListener("click",volver);
+
+// ---------- Mensaje al administrador ----------
+$("btnMensaje").addEventListener("click",mostrarMensaje);
+$("btnVolverMsg").addEventListener("click",volverMensaje);
+$("btnEnviarMsg").addEventListener("click",enviarMensaje);
+
+function mostrarMensaje(){
+  $("panel").classList.add("hidden");
+  $("editor").classList.add("hidden");
+  $("mensajeView").classList.remove("hidden");
+  $("btnVolverTop").classList.remove("hidden");
+  $("btnNuevo").classList.add("hidden");
+  $("btnMensaje").classList.add("hidden");
+  $("topTitle").textContent="Mensaje al administrador";
+  $("msgAsunto").focus();
+}
+
+function volverMensaje(){
+  $("mensajeView").classList.add("hidden");
+  $("panel").classList.remove("hidden");
+  $("btnVolverTop").classList.add("hidden");
+  $("btnNuevo").classList.remove("hidden");
+  $("btnMensaje").classList.remove("hidden");
+  $("topTitle").textContent="Panel de Geo.Gráficas";
+}
+
+async function enviarMensaje(){
+  const asunto=$val("msgAsunto");
+  const texto=$val("msgTexto");
+  if(!asunto||!texto){toast("Completá el asunto y el mensaje");return;}
+  const btn=$("btnEnviarMsg");
+  btn.disabled=true;btn.textContent="Enviando…";
+  try{
+    await api("/api/mensaje",{method:"POST",body:JSON.stringify({asunto,mensaje:texto})});
+    toast("Enviado");
+    $("msgAsunto").value="";$("msgTexto").value="";
+    volverMensaje();
+  }catch(e){toast(e.message||"No se pudo enviar");}
+  finally{btn.disabled=false;btn.textContent="Enviar";}
+}
+
 $("btnLocal").addEventListener("click",loginLocal);
 $("locPass").addEventListener("keydown",(e)=>{if(e.key==="Enter")loginLocal();});
 ["emoji","materia","destacado"].forEach(id=>$(id).addEventListener("change",updatePreview));
@@ -764,7 +842,7 @@ $("btnQuitarPortada").addEventListener("click",async ()=>{
   imagenData=null;
   imagenUrl="";
   $("portadaFile").value="";
-  $("portadaRow").hidden=true;
+  mostrarPortada();
   toast("Imagen de portada quitada");
   if(prev){
     try{
@@ -787,6 +865,7 @@ function mostrarPortada(){
     row.hidden=true;
     img.removeAttribute("src");
   }
+  updatePreview();
 }
 
 function imagenRel(){
