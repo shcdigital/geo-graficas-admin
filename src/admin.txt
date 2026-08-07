@@ -272,6 +272,10 @@
           <p class="muted small">Si no subís imagen, se usa el degradado + emoji.</p>
           <div class="imagen-row" id="portadaRow" hidden>
             <img class="imagen-preview" id="portadaPreview" alt="Portada" />
+            <button type="button" class="btn btn-ghost btn-sm" id="btnRefrescarPortada">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.4M21 12a9 9 0 0 1-15.5 6.4M21 3v6h-6M3 21v-6h6"/></svg>
+              Refrescar
+            </button>
             <button type="button" class="btn btn-ghost btn-sm" id="btnQuitarPortada">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></svg>
               Quitar imagen
@@ -512,6 +516,12 @@ function renderChips(name){
     .join("");
 }
 
+function portadaSrc(){
+  if(!imagenUrl) return "";
+  if(/^https?:/i.test(imagenUrl)) return imagenUrl;
+  return (WB||"")+imagenUrl;
+}
+
 function updatePreview(){
   const media=$("preview");
   const img=$("preview-imagen");
@@ -519,7 +529,7 @@ function updatePreview(){
     img.src="data:image/"+imagenData.ext+";base64,"+imagenData.base64;
     img.hidden=false;
   }else if(imagenUrl){
-    img.src=imagenUrl;
+    img.src=portadaSrc();
     img.hidden=false;
   }else{
     img.removeAttribute("src");
@@ -694,10 +704,36 @@ function editar(slug){
     $("slug").value=slug;
     imagenData=null;
     imagenUrl=fm.imagen||"";
-    mostrarPortada();
-    updatePreview();
-    toast("Cuadernillo cargado");
+    if(imagenUrl){
+      mostrarPortada();
+      updatePreview();
+      toast("Cuadernillo cargado");
+    }else{
+      detectarPortada(slug).then(()=>{
+        updatePreview();
+        toast("Cuadernillo cargado");
+      });
+    }
   }).catch(e=>{toast(e.message||"No se pudo cargar");});
+}
+
+async function detectarPortada(slug){
+  const exts=["png","jpg","jpeg","webp","gif"];
+  for(const ext of exts){
+    try{
+      const probe=portadaUrl(slug,ext);
+      const res=await fetch(probe,{method:"HEAD",cache:"no-store"});
+      if(res.ok){
+        imagenUrl="/img/recursos/"+slug+"."+ext;
+        mostrarPortada();
+        return;
+      }
+    }catch(e){}
+  }
+}
+
+function portadaUrl(slug,ext){
+  return (WB||"")+"/img/recursos/"+slug+"."+ext;
 }
 
 function selectPalette(from,to){
@@ -837,6 +873,23 @@ $("portadaFile").addEventListener("change",(e)=>{
   };
   reader.readAsDataURL(file);
 });
+$("btnRefrescarPortada").addEventListener("click",async ()=>{
+  if(!imagenUrl){toast("No hay imagen de portada para refrescar");return;}
+  if(imagenData){mostrarPortada();toast("Imagen local actualizada");return;}
+  try{
+    const img=$("portadaPreview");
+    const prev=$("preview-imagen");
+    const bust=portadaSrc().split("?")[0]+"?v="+Date.now();
+    const res=await fetch(bust,{cache:"no-store"});
+    if(!res.ok)throw new Error("HTTP "+res.status);
+    img.src=bust;
+    if(prev)prev.src=bust;
+    toast("Imagen recargada desde el repo");
+  }catch(e){
+    toast("No se pudo recargar: "+(e.message||e));
+  }
+});
+
 $("btnQuitarPortada").addEventListener("click",async ()=>{
   const prev=imagenUrl;
   imagenData=null;
@@ -859,7 +912,7 @@ function mostrarPortada(){
     img.src="data:image/"+imagenData.ext+";base64,"+imagenData.base64;
     row.hidden=false;
   }else if(imagenUrl){
-    img.src=imagenUrl;
+    img.src=portadaSrc();
     row.hidden=false;
   }else{
     row.hidden=true;

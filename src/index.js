@@ -49,6 +49,13 @@ export default {
       return corsWrap(await loginLocal(request, env, origin), env, origin);
     }
 
+    // Imágenes de portada: se sirven desde el repo geo-graficas-web
+    // (public/img/recursos/...) para que el panel muestre la portada real
+    // aunque el sitio aún no se haya redesplegado.
+    if (url.pathname.startsWith("/img/")) {
+      return await serveImagen(request, env, url);
+    }
+
     // API de cuadernillos (requiere sesión)
     if (url.pathname.startsWith("/api/")) {
       return corsWrap(await handleApi(request, env, ctx, url), env, origin);
@@ -352,6 +359,42 @@ async function deleteRecurso(env, { slug, message }) {
     body: JSON.stringify({ branch: env.DEFAULT_BRANCH, commit_message: message || `Eliminar ${slug}.md` }),
   });
   return { ok: res.ok, message: res.ok ? "Eliminado" : `GitLab: ${res.data?.message || res.status}` };
+}
+
+// ---------- Imágenes de portada (proxy al repo) ----------
+// Sirve /img/recursos/<archivo> leyendo el archivo real del repo
+// geo-graficas-web (public/img/recursos/...), para que la vista previa del
+// editor y el listado muestren la portada publicada en el sitio.
+const IMG_MIME = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+async function serveImagen(request, env, url) {
+  const sessionId = getSession(request);
+  const session = sessionId ? JSON.parse((await env.SESSIONS.get(`session:${sessionId}`)) || "null") : null;
+  if (!session) return new Response("No autenticado", { status: 401 });
+
+  const rel = url.pathname.replace(/^\/+/, "");
+  const name = rel.split("/").pop();
+  const ext = (name.split(".").pop() || "").toLowerCase();
+  const mime = IMG_MIME[ext];
+  if (!mime) return new Response("Not found", { status: 404 });
+
+  const imagePath = `${env.IMG_PATH.replace(/\/+$/, "")}/${name}`;
+  const url2 = `https://gitlab.com/api/v4/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(imagePath)}/raw?ref=${env.DEFAULT_BRANCH}`;
+  const res = await fetch(url2, { headers: glHeaders(env) });
+  if (!res.ok) return new Response("Not found", { status: 404 });
+
+  return new Response(res.body, {
+    headers: {
+      "Content-Type": mime,
+      "Cache-Control": "public, max-age=300",
+    },
+  });
 }
 
 // ---------- Precios (repo geo-graficas-web, archivo canónico) ----------
