@@ -14,10 +14,13 @@
     --radius:14px;--radius-sm:10px;--radius-full:9999px;
   }
   *{box-sizing:border-box}
-  body{margin:0;font-family:var(--font);color:var(--text);background:var(--raised);-webkit-font-smoothing:antialiased}
+  body{margin:0;font-family:var(--font);color:var(--text);background:var(--raised);-webkit-font-smoothing:antialiased;padding-top:clamp(3.4rem,11vw,5.6rem)}
   .shc-banner{
-    display:flex;align-items:center;justify-content:center;gap:.6rem;padding:clamp(1.1rem,3vw,2rem) 1rem;
-    background:#000;color:#fff;font-weight:800;font-size:clamp(1.2rem,5vw,3rem);letter-spacing:.12em;
+    position:fixed;top:0;left:0;right:0;z-index:100;
+    display:flex;align-items:center;justify-content:center;gap:.5rem;
+    padding:clamp(.9rem,2.5vw,1.7rem) 1rem;
+    background:#000;color:#fff;font-weight:800;
+    font-size:clamp(1rem,4.2vw,2.55rem);letter-spacing:.12em;
     text-transform:uppercase;text-align:center;white-space:nowrap;font-family:Arial,sans-serif;
   }
   .shc-banner .dot{color:#f00}
