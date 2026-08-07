@@ -10,10 +10,7 @@ pages:
   stage: deploy
   script:
     - mkdir -p public
-    - sed -e "s|__WORKER_BASE__|${GITLAB_PAGES_WORKER_BASE}|g" \
-          -e "s|__SITE_URL__|${GITLAB_PAGES_SITE_URL}|g" \
-          -e "s|__CLIENTES_URL__|${GITLAB_PAGES_CLIENTES_URL}|g" \
-          src/admin.txt > public/index.html
+    - sed -e "s|__WORKER_BASE__|${GITLAB_PAGES_WORKER_BASE:-https://panel.geograficas.shcdigital.net.ar}|g" -e "s|__SITE_URL__|${GITLAB_PAGES_SITE_URL:-https://geo-graficas-web-d6a153.gitlab.io}|g" -e "s|__CLIENTES_URL__|${GITLAB_PAGES_CLIENTES_URL:-https://clientes.shcdigital.net.ar}|g" src/admin.txt > public/index.html
     - ls -la public
   artifacts:
     paths:
