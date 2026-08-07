@@ -91,14 +91,14 @@ async function loginLocal(request, env, origin) {
   const derived = await pbkdf2(pass, salt);
   if (!constantTimeEqual(derived, expected)) return json({ error: "Usuario o contraseña incorrectos" }, 401);
 
-  return makeSession(env, { email: `${LOCAL_USER}@local`, name: "Administrador local" }, origin);
+  return await makeSession(env, { email: `${LOCAL_USER}@local`, name: "Administrador local" }, origin);
 }
 
 function originOf(request) {
   return request.headers.get("Origin") || new URL(request.url).origin;
 }
 
-function makeSession(env, user, origin) {
+async function makeSession(env, user, origin) {
   const sessionId = crypto.randomUUID();
   const cross = env.SITE_URL && (!origin || origin.replace(/\/+$/, "") !== (env.SITE_URL || "").replace(/\/+$/, ""));
   const sameSite = cross ? "None" : "Lax";
@@ -354,33 +354,12 @@ async function deleteRecurso(env, { slug, message }) {
   return { ok: res.ok, message: res.ok ? "Eliminado" : `GitLab: ${res.data?.message || res.status}` };
 }
 
-// ---------- Precios (repo pay, mismo patrón que los cuadernillos) ----------
-// El archivo de precios vive en geo-graficas-pay (data/products.json), la
-// fuente de verdad que cobra el checkout. El panel lo lee y escribe con un
-// token de proyecto scoped al repo pay (GITLAB_PAY_TOKEN, secret).
-function glPayHeaders(env) {
-  return { "PRIVATE-TOKEN": env.GITLAB_PAY_TOKEN, "Content-Type": "application/json" };
-}
-
-function glPayProject(env) {
-  return encodeURIComponent(env.GITLAB_PAY_PROJECT || "");
-}
-
-function glPayBranch(env) {
-  return encodeURIComponent(env.GITLAB_PAY_BRANCH || "master");
-}
-
+// ---------- Precios (repo geo-graficas-web, archivo canónico) ----------
+// El archivo de precios vive en geo-graficas-web (src/data/prices.json) y es
+// la fuente única de verdad: la web lo muestra, el worker pay lo toma al
+// desplegar y acá se edita. Se usa el mismo GITLAB_TOKEN del repo web.
 function pricesFilePath(env) {
-  return env.PRICES_PATH || "data/products.json";
-}
-
-async function glPayFetch(env, path, opts = {}) {
-  const url = `https://gitlab.com/api/v4/projects/${glPayProject(env)}${path}`;
-  const res = await fetch(url, { ...opts, headers: { ...glPayHeaders(env), ...(opts.headers || {}) } });
-  const text = await res.text();
-  let data;
-  try { data = JSON.parse(text); } catch { data = text; }
-  return { ok: res.ok, status: res.status, data };
+  return env.PRICES_PATH || "src/data/prices.json";
 }
 
 function validPrices(categories) {
@@ -397,14 +376,17 @@ function validPrices(categories) {
 
 async function getPrices(env) {
   const filePath = pricesFilePath(env);
-  const res = await glPayFetch(env, `/repository/files/${encodeURIComponent(filePath)}/raw?ref=${glPayBranch(env)}`);
-  if (!res.ok) return { error: `GitLab pay: ${res.data?.message || res.status}` };
-  let parsed;
-  try { parsed = JSON.parse(res.data); } catch { return { error: "El archivo de precios no es JSON válido" }; }
+  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}/raw?ref=${env.DEFAULT_BRANCH}`);
+  if (!res.ok) return { error: `GitLab: ${res.data?.message || res.status}` };
+  const parsed = typeof res.data === "string" ? safeJson(res.data) : res.data;
   if (!parsed || typeof parsed.categories !== "object" || parsed.categories === null) {
     return { error: "Estructura inesperada en el archivo de precios" };
   }
   return { categories: parsed.categories };
+}
+
+function safeJson(text) {
+  try { return JSON.parse(text); } catch { return null; }
 }
 
 async function savePrices(env, categories) {
@@ -413,15 +395,15 @@ async function savePrices(env, categories) {
     return { ok: false, message: "Datos de precios inválidos (solo Cat-A..Cat-J con precios numéricos >= 0)" };
   }
   const filePath = pricesFilePath(env);
-  const existing = await glPayFetch(env, `/repository/files/${encodeURIComponent(filePath)}?ref=${glPayBranch(env)}`);
+  const existing = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}?ref=${env.DEFAULT_BRANCH}`);
   const isUpdate = existing.ok;
   const body = {
-    branch: env.GITLAB_PAY_BRANCH || "master",
+    branch: env.DEFAULT_BRANCH,
     content: JSON.stringify({ categories: clean }, null, 2) + "\n",
     commit_message: isUpdate ? "Actualizar precios desde panel" : "Crear archivo de precios desde panel",
   };
   if (isUpdate) body.last_commit_id = existing.data?.last_commit_id;
-  const res = await glPayFetch(env, `/repository/files/${encodeURIComponent(filePath)}`, {
+  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}`, {
     method: isUpdate ? "PUT" : "POST",
     body: JSON.stringify(body),
   });

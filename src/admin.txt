@@ -137,7 +137,7 @@
       </div>
       <p class="muted" id="pricesStatus">Cargando…</p>
       <div class="prices-grid" id="pricesGrid"></div>
-      <p class="hint">Los cambios se guardan en el repo geo-graficas-pay y aplican al checkout cuando el worker se redespliegue (CI) y al sitio en el próximo build.</p>
+      <p class="hint">Los cambios se guardan en el repo geo-graficas-web (fuente única de precios) y aplican al checkout cuando el worker pay se redespliegue (CI) y al sitio en el próximo build.</p>
     </section>
 
     <div class="grid" id="lista"></div>
@@ -374,7 +374,7 @@ function renderPreciosGrid(){
     </div>`).join("");
   const st=$("pricesStatus");
   if(st)st.textContent=preciosFuente==="live"
-    ?"Precios actuales del repo geo-graficas-pay."
+    ?"Precios actuales del repo geo-graficas-web (fuente única)."
     :"No se pudieron leer los precios del repo (mostrando valores locales).";
 }
 
@@ -425,7 +425,7 @@ async function guardarPrecios(){
     const d=await api("/api/prices",{method:"PUT",body:JSON.stringify({categories})});
     toast(d.message||"Precios actualizados");
     await cargarPrecios();
-    okPopup("Precios actualizados","Se guardó en el repo geo-graficas-pay. Aplica al checkout cuando el worker se redespliegue (CI) y al sitio en el próximo build.");
+    okPopup("Precios actualizados","Se guardó en el repo geo-graficas-web. Aplica al checkout cuando el worker pay se redespliegue (CI) y al sitio en el próximo build.");
   }catch(e){toast(e.message||"No se pudieron actualizar los precios");}
   finally{btn.disabled=false;btn.textContent="Actualizar";}
 }

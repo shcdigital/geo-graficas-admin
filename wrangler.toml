@@ -29,12 +29,9 @@ IMG_PATH = "public/img/recursos"
 DEFAULT_BRANCH = "main"
 # Proyecto GitLab donde vive el contenido (geo-graficas-web)
 GITLAB_PROJECT_ID = "85162233"
-# Proyecto GitLab donde vive el archivo de precios (geo-graficas-pay).
-# SECRET requerido: GITLAB_PAY_TOKEN = token de PROYECTO (scope api) del repo pay.
-# Se carga con: npx wrangler secret put GITLAB_PAY_TOKEN
-GITLAB_PAY_PROJECT = "pabloberthold/geo-graficas-pay"
-GITLAB_PAY_BRANCH = "master"
-PRICES_PATH = "data/products.json"
+# Archivo canónico de precios (vive en geo-graficas-web, fuente única).
+# Se usa el mismo GITLAB_TOKEN del repo web (secret).
+PRICES_PATH = "src/data/prices.json"
 # Destinatario de los mensajes del panel (botón "Enviar mensaje")
 ADMIN_EMAIL = "shcdigitalsolutions@gmail.com"
 # URL del worker geo-graficas-pay: envía el mail con su RESEND_API_KEY
