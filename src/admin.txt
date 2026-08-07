@@ -104,7 +104,7 @@
     <div class="row">
       <button class="btn btn-ghost" id="btnSSO" style="margin-right:auto">← Panel de clientes</button>
       <button class="btn btn-primary hidden" id="btnNuevo">+ Nuevo cuadernillo</button>
-      <a class="btn btn-ghost hidden" id="btnSitio" href="https://geo-graficas-web-d6a153.gitlab.io" target="_blank" rel="noopener">Ver sitio</a>
+      <a class="btn btn-ghost hidden" id="btnSitio" href="__SITE_URL__" target="_blank" rel="noopener">Ver sitio</a>
       <button class="btn btn-ghost hidden" id="btnCerrar">Cerrar sesión</button>
       <button type="button" class="btn btn-ghost hidden" id="btnVolverTop">← Volver</button>
     </div>
@@ -315,7 +315,7 @@
 <script>
 window.WORKER_BASE = "__WORKER_BASE__" || window.WORKER_BASE || "";
 const WB = window.WORKER_BASE;
-const CLIENTES_URL = "https://clientes.shcdigital.net.ar";
+const CLIENTES_URL = "__CLIENTES_URL__" || "https://clientes.shcdigital.net.ar";
 const $=(id)=>document.getElementById(id);
 const $val=(id)=>$(id).value.trim();
 let sesion=null;

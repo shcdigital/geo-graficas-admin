@@ -450,5 +450,8 @@ function constantTimeEqual(a, b) {
 
 function renderAdmin(env, url) {
   const workerBase = url.origin;
-  return adminHtml.replaceAll("__WORKER_BASE__", workerBase);
+  return adminHtml
+    .replaceAll("__WORKER_BASE__", workerBase)
+    .replaceAll("__SITE_URL__", env.SITE_URL || "")
+    .replaceAll("__CLIENTES_URL__", env.CLIENTES_URL || "");
 }

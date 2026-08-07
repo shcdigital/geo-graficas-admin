@@ -1,14 +1,19 @@
 image: node:20-alpine
 
-# Variable requerida al ejecutar el pipeline (Settings > CI/CD > Variables):
+# Variables requeridas al ejecutar el pipeline (Settings > CI/CD > Variables):
 #   GITLAB_PAGES_WORKER_BASE = https://geo-graficas-admin.<tu-subdominio>.workers.dev
-# Sirve para inyectar la URL del Worker en el panel estático (admin.html).
+#   GITLAB_PAGES_SITE_URL    = dominio público del sitio (geo-graficas-web)
+#   GITLAB_PAGES_CLIENTES_URL= base del panel de clientes (SSO)
+# Sirven para inyectar la URL del Worker y los enlaces en el panel estático (admin.html).
 
 pages:
   stage: deploy
   script:
     - mkdir -p public
-    - sed "s|__WORKER_BASE__|${GITLAB_PAGES_WORKER_BASE}|g" src/admin.txt > public/index.html
+    - sed -e "s|__WORKER_BASE__|${GITLAB_PAGES_WORKER_BASE}|g" \
+          -e "s|__SITE_URL__|${GITLAB_PAGES_SITE_URL}|g" \
+          -e "s|__CLIENTES_URL__|${GITLAB_PAGES_CLIENTES_URL}|g" \
+          src/admin.txt > public/index.html
     - ls -la public
   artifacts:
     paths:
