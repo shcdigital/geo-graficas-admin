@@ -104,6 +104,9 @@ function makeSession(env, user, origin) {
   const sameSite = cross ? "None" : "Lax";
   const secure = cross ? "; Secure" : "";
   const cookie = `gg_session=${sessionId}; HttpOnly; Path=/; SameSite=${sameSite}${secure}; Max-Age=${60 * 60 * 12}`;
+  // Persistir la sesión en KV, igual que hace el SSO. Sin esto /auth/me nunca
+  // encuentra la sesión y el login local no entra.
+  await env.SESSIONS.put(`session:${sessionId}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 12 });
   return new Response(
     `<!doctype html><html><body><script>window.location.href = "/";</script></body></html>`,
     { headers: { "Content-Type": "text/html", "Set-Cookie": cookie } }
