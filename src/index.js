@@ -193,6 +193,13 @@ async function ssoLogin(request, env, ctx) {
     return new Response("Cliente no autorizado para este panel", { status: 403, headers: HTML_HEADERS });
   }
 
+  // El token fue firmado para el admin_url del tenant (claim "aud");
+  // rechazar si no coincide con la URL pública de ESTE panel.
+  const expectedAud = (env.PANEL_URL || new URL(request.url).origin).replace(/\/+$/, "");
+  if (expectedAud && payload.aud && payload.aud.replace(/\/+$/, "") !== expectedAud) {
+    return new Response("Token no emitido para este panel", { status: 403, headers: HTML_HEADERS });
+  }
+
   const sessionId = crypto.randomUUID();
   const user = { email: payload.sub || "cliente@local", name: payload.name || payload.sub || "Cliente" };
   await env.SESSIONS.put(`session:${sessionId}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 12 });
@@ -527,9 +534,14 @@ async function sendMensaje(env, session, body) {
     : "Sin sesión";
   const text = `${mensaje}\n\n— Enviado desde el panel de administración de Geo.Gráficas\n• Cliente: ${cliente}\n• Sitio: ${env.SITE_URL || ""}`;
 
+  if (!env.EMAIL_TOKEN) return { ok: false, message: "EMAIL_TOKEN no configurado" };
+
   const res = await fetch(`${payUrl}/email`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "Authorization": `Bearer ${env.EMAIL_TOKEN}`,
+    },
     body: JSON.stringify({
       to,
       subject: `[Panel Geo.Gráficas] ${asunto}`,

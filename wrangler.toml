@@ -19,6 +19,8 @@ APP_NAME = "Geo.Gráficas Admin"
 SITE_URL = "https://geo-graficas-web-d6a153.gitlab.io"
 # Base del panel de clientes (SSO)
 CLIENTES_URL = "https://clientes.shcdigital.net.ar"
+# URL pública de este panel; debe coincidir con el "aud" (admin_url) que firma el SSO
+PANEL_URL = "https://panel.geograficas.shcdigital.net.ar"
 # Id único de este cliente (debe coincidir con el "id" del tenant en el SSO de clientes)
 TENANT_ID = "geo-graficas"
 # Emails con acceso (separados por coma)
