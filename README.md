@@ -81,8 +81,14 @@ npx wrangler secret put GITLAB_PAY_TOKEN    # token scope api del repo pay (rama
 ### 4. Deploy
 
 ```bash
-npx wrangler deploy
+npm run deploy        # wrangler deploy manual
 ```
+
+**Deploy automático:** el pipeline de GitLab (`deploy-worker`) corre
+`wrangler deploy` con cada push a `main`, usando la variable protegida
+`CLOUDFLARE_API_TOKEN` (Settings → CI/CD → Variables). El `account_id` está
+fijado en `wrangler.toml` para que el CI despliegue sin credenciales OAuth
+locales.
 
 ## Copia estática en GitLab Pages
 

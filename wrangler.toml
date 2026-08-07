@@ -1,6 +1,7 @@
 name = "geo-graficas-admin"
 main = "src/index.js"
 compatibility_date = "2026-08-06"
+account_id = "d1509c610d7908f0f340251a340ddf4c"
 
 # Dominio de producción para este panel (subdominio propio bajo shcdigital.net.ar)
 [[routes]]
