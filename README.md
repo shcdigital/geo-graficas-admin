@@ -1,53 +1,34 @@
 # Geo.Gráficas — Panel de administración
 
-Panel de administración del sitio Geo.Gráficas con **login por SSO de SHC
-Digital** (`clientes.shcdigital.net.ar`, JWT firmado) o **usuario/contraseña
-local**, servido por un **Cloudflare Worker** (plan gratuito) y también como
-página estática en GitLab Pages. Permite crear, editar y borrar cuadernillos
-(`.md`) directamente contra el repo de GitLab, y GitLab Pages vuelve a
-publicar automáticamente.
+Panel de administración de Geo.Gráficas servido por un **Cloudflare Worker**
+(en el dominio `panel.geograficas.shcdigital.net.ar`) y también como copia
+estática en GitLab Pages. Permite:
+
+- **CRUD de cuadernillos** (`.md`) directamente contra el repo `geo-graficas-web`
+  vía GitLab API; el pipeline de Pages republica automáticamente.
+- **Editor de precios**: card "Precios por categoría" que lee/escribe
+  `data/products.json` del repo `geo-graficas-pay`; la CI del pay re-despliega
+  el worker y los precios nuevos aplican al checkout.
+- **Dropdown de categoría con precio** en el formulario de edición (ej.
+  `Cat-B · $4.500`).
 
 ## Cómo funciona
 
 ```
 [clientes.shcdigital.net.ar]   (Worker SSO de SHC Digital — repo web)
-      │  welcome + login (local ahora / Google después)
-      │  email → TENANTS → JWT firmado
+      │  login → JWT firmado (SHARED_JWT_SECRET)
       ▼
-[este Worker /auth/sso]   (valida JWT con SHARED_JWT_SECRET)
-      ▼  sesión KV + cookie
- Cloudflare Worker ──GitLab API──▶  repo geo-graficas-web ──pipeline──▶  Pages
-   sesiones en KV                          (crear/editar/borrar .md)
+[este Worker /auth/sso]  ── sesión KV + cookie (SameSite=None; Secure)
+      ▼
+ Cloudflare Worker ──GitLab API──▶  repo geo-graficas-web  (cuadernillos .md)
+                        ──GitLab API──▶  repo geo-graficas-pay (precios)
 ```
 
-- El **frontend** (catálogo) sigue 100% en GitLab Pages, intacto.
-- El **panel admin** abre sesión por **SSO** (el Worker de clientes valida el
-  login y redirige acá con un JWT) o por **usuario/contraseña local**
-  (`admin`/`admin123`, PBKDF2 en el código).
-- `TENANT_ID` debe coincidir con el `id` del tenant configurado en el SSO.
+- **Frontend** (catálogo) sigue 100% en GitLab Pages, intacto.
+- Login por **SSO** (JWT de `clientes.shcdigital.net.ar`) o **local**
+  (`admin`/`admin123`, hash PBKDF2-SHA256 en el código; cambiar
+  `LOCAL_SALT_B64`/`LOCAL_HASH_B64`).
 - Cada guardado/borrado hace un commit a GitLab que dispara el pipeline Pages.
-
-## Publicar el panel también en GitLab Pages
-
-Además del Worker (que ya sirve el panel en su raíz), podés publicar una copia
-estática del panel en GitLab Pages para jugarla incluso si el Worker listo no
-está accesible o como respaldo:
-
-1. Configurá la variable de CI `GITLAB_PAGES_WORKER_BASE` con la URL pública del
-   Worker (ej: `https://geo-graficas-admin.<subdominio>.workers.dev`).
-2. El pipeline `.gitlab-ci.yml` genera `public/index.html` a partir de
-   `src/admin.txt` reemplazando `__WORKER_BASE__` → el SPA apunta a la API del
-   Worker.
-3. El panel estático llama al Worker con credenciales (CORS); la cookie de
-   sesión se setea `SameSite=None; Secure` para flujos cross-origin.
-
-## Requisitos
-
-1. **SSO**: un Worker de clientes (repo `web`, `clientes/`) con
-   `SHARED_JWT_SECRET` configurado.
-2. **Cloudflare**: una cuenta con Workers (plan gratuito) + acceso a los secrets.
-3. **GitLab**: un token de proyecto con scope `api` para el repo geo-gráficas-web.
-
 
 ## Configuración
 
@@ -56,43 +37,28 @@ está accesible o como respaldo:
 ```bash
 npm i -D wrangler
 npx wrangler login
-npx wrangler kv namespace create SESSIONS
-# Copiar el <id> resultante a wrangler.toml (campo id del kv_namespaces)
+npx wrangler kv namespace create SESSIONS   # copiar id a wrangler.toml
 ```
 
-### 2. Setear secrets
+### 2. Secrets
 
 ```bash
-npx wrangler secret put GOOGLE_CLIENT_ID
-npx wrangler secret put GOOGLE_CLIENT_SECRET
-npx wrangler secret put GOOGLE_REDIRECT_URI   # https://admin.tudominio.com.ar/auth/callback
-npx wrangler secret put GITLAB_TOKEN          # token scope api del proyecto
-npx wrangler secret put GITLAB_PROJECT_ID      # ej: 85162233
+npx wrangler secret put SHARED_JWT_SECRET   # idéntico al del SSO de clientes
+npx wrangler secret put GITLAB_TOKEN        # token scope api del repo web
+npx wrangler secret put GITLAB_PAY_TOKEN    # token scope api del repo pay (rama master)
 ```
 
-### 3. Editar vars en `wrangler.toml`
+> `GITLAB_PAY_TOKEN` es **proyecto-scoped al repo pay** (mínimo privilegio). El
+> editor de precios no funciona sin él (`GET/PUT /api/prices` devuelve 401).
 
-- `ADMIN_EMAILS`: los emails con acceso (separados por coma).
-- `SITE_URL`: la URL del sitio público (para CORS).
-- `CONTENT_PATH` / `DEFAULT_BRANCH`: ruta de los `.md` y rama (defaults: `src/content/recursos`, `main`).
+### 3. Vars en `wrangler.toml`
 
-### 3b. Login local
-
-El panel acepta también `admin` / `admin123`. El hash PBKDF2-SHA256 (salt y hash
-en base64, sin la contraseña en claro) está en `src/index.js`. Para cambiarla,
-generá un nuevo hash, por ejemplo con Node:
-
-```bash
-node -e '
-const {webcrypto:crypto}=require("crypto");
-(async()=>{const s=crypto.getRandomValues(new Uint8Array(16));
-const k=await crypto.subtle.importKey("raw",new TextEncoder().encode("NUEVA_PASS"),"PBKDF2",false,["deriveBits"]);
-const b=await crypto.subtle.deriveBits({name:"PBKDF2",salt:s,iterations:100000,hash:"SHA-256"},k,256);
-console.log("SALT="+Buffer.from(s).toString("base64"));
-console.log("HASH="+Buffer.from(b).toString("base64"));})()'
-```
-
-Copiá esos valores a `LOCAL_SALT_B64` / `LOCAL_HASH_B64` en `src/index.js`.
+- `SITE_URL`: dominio público del sitio (botón "Ver sitio").
+- `CLIENTES_URL`: base del panel de clientes/SSO.
+- `TENANT_ID` / `ADMIN_EMAILS`: tenant y emails con acceso.
+- `GITLAB_PROJECT_ID`: id del repo web (contenido).
+- `GITLAB_PAY_PROJECT` / `GITLAB_PAY_BRANCH` / `PRICES_PATH`: repo pay de precios.
+- `CONTENT_PATH` / `IMG_PATH` / `DEFAULT_BRANCH`: rutas de los `.md` e imágenes.
 
 ### 4. Deploy
 
@@ -100,29 +66,31 @@ Copiá esos valores a `LOCAL_SALT_B64` / `LOCAL_HASH_B64` en `src/index.js`.
 npx wrangler deploy
 ```
 
-## Enrutar el subdominio admin
+## Copia estática en GitLab Pages
 
-Cuando tengas el dominio en tu cuenta de Cloudflare:
+`.gitlab-ci.yml` genera `public/index.html` a partir de `src/admin.txt`
+reemplazando tokens. Variables de CI (Settings → CI/CD → Variables):
 
-1. **Dominio en Cloudflare (gratis)**: agregá el dominio como sitio en Cloudflare
-   → Cloudflare te da los nameservers → cambiás los nameservers en tu registrador.
-2. **Nameserver + registrador**: apuntá el dominio a Cloudflare siguiendo el
-   wizard (`Cloudflare → Add site`).
-3. **Ruta del Worker**: en Cloudflare Workers → tu Worker → **Routes** → agregá
-   `admin.tudominio.com.ar/*` → el Worker se sirve ahí. Cloudflare provee el
-   certificado HTTPS gratis y automático.
-4. Asegurate de que `GOOGLE_REDIRECT_URI` coincida con `https://admin.tudominio.com.ar/auth/callback` (configurado como URI de redirect válida en el OAuth de Google).
+- `GITLAB_PAGES_WORKER_BASE` → URL del Worker (API del panel).
+- `GITLAB_PAGES_SITE_URL` → dominio público del sitio.
+- `GITLAB_PAGES_CLIENTES_URL` → base del SSO.
 
-> Sin dominio todavía: se puede probar en la URL temporal del Worker
-> `https://geo-graficas-admin.<subdomain>.workers.dev` y setear temporalmente
-> `GOOGLE_REDIRECT_URI` a esa URL.
+## Inyección de tokens
 
-## Posición del repositorio
+El SPA (`src/admin.txt`) usa placeholders que el Worker reemplaza al servir
+(`renderAdmin` en `src/index.js`) y que el pipeline Pages reemplaza vía `sed`:
 
-- Este repo (`geo-graficas-admin`) es solo el Worker. No toca el frontend.
-- El frontend (`geo-gradas-web`) sigue en GitLab Pages con su pipeline propio.
+- `__WORKER_BASE__` → origen del Worker (API).
+- `__SITE_URL__` → botón "Ver sitio".
+- `__CLIENTES_URL__` → botón "← Panel de clientes".
 
-## Secretos con datos de producción
+## Migración de cuenta / replicación para otro cliente
 
-⚠ Nunca commitear secretos. Todos los `GOOGLE_*`, `GITLAB_TOKEN`,
-`GITLAB_PROJECT_ID` se gestionan con `npx wrangler secret put` (nunca en el repo).
+Ver [`docs/MIGRACION-CUENTA.md`](../geo-graficas-web/docs/MIGRACION-CUENTA.md)
+— lista las variables por repo para cambiar de namespace GitLab o clonar el
+sistema para otro cliente.
+
+## Seguridad
+
+Nunca commitear secretos. Todos los tokens se gestionan con
+`npx wrangler secret put`.
