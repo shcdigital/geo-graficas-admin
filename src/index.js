@@ -2,13 +2,13 @@
 // Panel de administración de Geo.Gráficas.
 // - Login: SSO vía clientes.shcdigital.net.ar (JWT firmado) o local (PBKDF2, hash en el repo)
 // - Sesiones en Workers KV
-// - CRUD de cuadernillos (.md) contra la API de GitLab
+// - CRUD de cuadernillos (.md) contra el repo geo-graficas-web (GitHub API)
 // Se sirve en: <admin del cliente> (ruta Cloudflare Workers) y también
-// como página estática en GitLab Pages (apuntando a este Worker para la API).
+// como página estática en GitHub Pages (apuntando a este Worker para la API).
 
 // ---------- Secrets requeridos (wrangler secret put) ----------
 // SHARED_JWT_SECRET (idéntico al del Worker SSO de clientes)
-// GITLAB_TOKEN (token de proyecto con scope api) / GITLAB_PROJECT_ID
+// GITHUB_TOKEN (token con scope repo del repo web) / GITHUB_REPO
 
 // Login local: hash PBKDF2-SHA256 (100000 iter) de la contraseña + salt.
 // SOLO está el hash, nunca la contraseña en claro.
@@ -258,7 +258,8 @@ async function handleApi(request, env, ctx, url) {
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "recurso" && request.method === "DELETE") {
-    const body = await request.json();
+    let body = {};
+    try { body = await request.json(); } catch {}
     if (!body || !validSlug(body.slug)) return json({ error: "Slug inválido" }, 400);
     const res = await deleteRecurso(env, body);
     return json(res, res.ok ? 200 : 400);
@@ -297,78 +298,102 @@ async function handleApi(request, env, ctx, url) {
   return json({ error: "Ruta no encontrada" }, 404);
 }
 
-// ---------- GitLab API ----------
-function glHeaders(env) {
-  return { "PRIVATE-TOKEN": env.GITLAB_TOKEN, "Content-Type": "application/json" };
+// ---------- GitHub API ----------
+// El contenido (cuadernillos, imágenes, precios, materias) vive en el repo
+// geo-graficas-web (GitHub). Se usa GITHUB_TOKEN (scope repo) para escribir.
+function ghRepo(env) {
+  return env.GITHUB_REPO || "shcdigital/geo-graficas-web";
 }
 
-async function glFetch(env, path, opts = {}) {
-  const url = `https://gitlab.com/api/v4${path}`;
-  const res = await fetch(url, { ...opts, headers: { ...glHeaders(env), ...(opts.headers || {}) } });
+function ghHeaders(env, extra = {}) {
+  const h = { "X-GitHub-Api-Version": "2022-11-28", "Content-Type": "application/json", "User-Agent": "geo-graficas-admin-worker", ...extra };
+  if (env.GITHUB_TOKEN) h.Authorization = `Bearer ${env.GITHUB_TOKEN}`;
+  return h;
+}
+
+async function ghFetch(env, path, opts = {}) {
+  const url = `https://api.github.com${path}`;
+  const res = await fetch(url, { ...opts, headers: ghHeaders(env, opts.headers) });
   const text = await res.text();
   let data;
   try { data = JSON.parse(text); } catch { data = text; }
   return { ok: res.ok, status: res.status, data };
 }
 
+function toBase64(str) {
+  const bytes = new TextEncoder().encode(str);
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin);
+}
+
+async function ghContents(env, filePath) {
+  return ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(filePath)}?ref=${env.DEFAULT_BRANCH}`);
+}
+
+async function ghRaw(env, filePath) {
+  return ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(filePath)}?ref=${env.DEFAULT_BRANCH}`, {
+    headers: { Accept: "application/vnd.github.raw" },
+  });
+}
+
 async function listRecursos(env) {
-  const path = encodeURIComponent(env.CONTENT_PATH);
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/tree?path=${path}&ref=${env.DEFAULT_BRANCH}&per_page=100`);
-  if (!res.ok) return { error: `GitLab: ${res.data?.message || res.status}` };
-  const files = Array.isArray(res.data) ? res.data.filter((f) => f.type === "blob" && f.name.endsWith(".md")) : [];
+  const path = env.CONTENT_PATH;
+  const res = await ghContents(env, path);
+  if (!res.ok) return { error: `GitHub: ${res.data?.message || res.status}` };
+  const files = Array.isArray(res.data) ? res.data.filter((f) => f.type === "file" && f.name.endsWith(".md")) : [];
   const slugify = (name) => name.replace(/\.md$/, "");
   return files.map((f) => ({ name: f.name, slug: slugify(f.name), size: f.size, path: f.path }));
 }
 
 async function getRecurso(env, slug) {
   const filePath = `${env.CONTENT_PATH}/${slug}.md`;
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}/raw?ref=${env.DEFAULT_BRANCH}`);
-  if (!res.ok) return { error: `GitLab: ${res.data?.message || res.status}` };
+  const res = await ghRaw(env, filePath);
+  if (!res.ok) return { error: `GitHub: ${res.data?.message || res.status}` };
   return { slug, content: res.data };
 }
 
 async function saveRecurso(env, { slug, content, message }) {
   const filePath = `${env.CONTENT_PATH}/${slug}.md`;
-  const existing = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}?ref=${env.DEFAULT_BRANCH}`);
-  const isUpdate = existing.ok;
+  const existing = await ghContents(env, filePath);
+  const isUpdate = existing.ok && existing.data?.sha;
 
   const body = {
+    message: message || (isUpdate ? `Actualizar ${slug}.md` : `Crear ${slug}.md`),
+    content: toBase64(content),
     branch: env.DEFAULT_BRANCH,
-    content,
-    commit_message: message || (isUpdate ? `Actualizar ${slug}.md` : `Crear ${slug}.md`),
   };
-  if (isUpdate) body.last_commit_id = existing.data?.last_commit_id;
+  if (isUpdate) body.sha = existing.data.sha;
 
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}`, {
-    method: isUpdate ? "PUT" : "POST",
+  const res = await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(filePath)}`, {
+    method: "PUT",
     body: JSON.stringify(body),
   });
-  return { ok: res.ok, message: res.ok ? (isUpdate ? "Actualizado" : "Creado") : `GitLab: ${res.data?.message || res.status}` };
+  return { ok: res.ok, message: res.ok ? (isUpdate ? "Actualizado" : "Creado") : `GitHub: ${res.data?.message || res.status}` };
 }
 
 const IMG_ALLOWED_EXT = ["png", "jpg", "jpeg", "webp", "gif"];
 
 async function uploadImagen(env, { slug, ext, base64, message }) {
   const imagePath = `${env.IMG_PATH}/${slug}.${ext}`;
-  const existing = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(imagePath)}?ref=${env.DEFAULT_BRANCH}`);
-  const isUpdate = existing.ok;
+  const existing = await ghContents(env, imagePath);
+  const isUpdate = existing.ok && existing.data?.sha;
 
   const body = {
-    branch: env.DEFAULT_BRANCH,
-    encoding: "base64",
+    message: message || (isUpdate ? `Actualizar imagen ${slug}.${ext}` : `Crear imagen ${slug}.${ext}`),
     content: base64,
-    commit_message: message || (isUpdate ? `Actualizar imagen ${slug}.${ext}` : `Crear imagen ${slug}.${ext}`),
+    branch: env.DEFAULT_BRANCH,
   };
-  if (isUpdate) body.last_commit_id = existing.data?.last_commit_id;
+  if (isUpdate) body.sha = existing.data.sha;
 
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(imagePath)}`, {
-    method: isUpdate ? "PUT" : "POST",
+  const res = await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(imagePath)}`, {
+    method: "PUT",
     body: JSON.stringify(body),
   });
   return {
     ok: res.ok,
     path: imagePath,
-    message: res.ok ? (isUpdate ? "Imagen actualizada" : "Imagen subida") : `GitLab: ${res.data?.message || res.status}`,
+    message: res.ok ? (isUpdate ? "Imagen actualizada" : "Imagen subida") : `GitHub: ${res.data?.message || res.status}`,
   };
 }
 
@@ -377,32 +402,39 @@ async function deleteImagen(env, { slug, ext }) {
     ? `${env.IMG_PATH.replace(/^\/+/, "")}/${slug}.${ext}`
     : `${env.IMG_PATH.replace(/^\/+/, "")}/${slug}`;
   const imagePath = rel.replace(/^\/+/, "");
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(imagePath)}`, {
+  const existing = await ghContents(env, imagePath);
+  if (!existing.ok || !existing.data?.sha) return { ok: false, message: "Imagen no encontrada" };
+  const res = await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(imagePath)}`, {
     method: "DELETE",
-    body: JSON.stringify({ branch: env.DEFAULT_BRANCH, commit_message: `Eliminar imagen de ${slug}` }),
+    body: JSON.stringify({ message: `Eliminar imagen de ${slug}`, sha: existing.data.sha, branch: env.DEFAULT_BRANCH }),
   });
-  return { ok: res.ok, message: res.ok ? "Imagen eliminada" : `GitLab: ${res.data?.message || res.status}` };
+  return { ok: res.ok, message: res.ok ? "Imagen eliminada" : `GitHub: ${res.data?.message || res.status}` };
 }
 
 async function deleteRecurso(env, { slug, message }) {
   const filePath = `${env.CONTENT_PATH}/${slug}.md`;
-  const md = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}/raw?ref=${env.DEFAULT_BRANCH}`);
+  const md = await ghRaw(env, filePath);
   if (md.ok && typeof md.data === "string") {
     const m = md.data.match(/^imagen:\s*["']?([^"'\n]+)["']?\s*$/m);
     if (m) {
       const imgRel = m[1].replace(/^\/+/, "");
       const imgPath = decodeURIComponent(imgRel);
-      await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(imgPath)}`, {
-        method: "DELETE",
-        body: JSON.stringify({ branch: env.DEFAULT_BRANCH, commit_message: `Eliminar imagen de ${slug}` }),
-      });
+      const imgExisting = await ghContents(env, imgPath);
+      if (imgExisting.ok && imgExisting.data?.sha) {
+        await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(imgPath)}`, {
+          method: "DELETE",
+          body: JSON.stringify({ message: `Eliminar imagen de ${slug}`, sha: imgExisting.data.sha, branch: env.DEFAULT_BRANCH }),
+        });
+      }
     }
   }
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}`, {
+  const existing = await ghContents(env, filePath);
+  if (!existing.ok || !existing.data?.sha) return { ok: false, message: "Recurso no encontrado" };
+  const res = await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(filePath)}`, {
     method: "DELETE",
-    body: JSON.stringify({ branch: env.DEFAULT_BRANCH, commit_message: message || `Eliminar ${slug}.md` }),
+    body: JSON.stringify({ message: message || `Eliminar ${slug}.md`, sha: existing.data.sha, branch: env.DEFAULT_BRANCH }),
   });
-  return { ok: res.ok, message: res.ok ? "Eliminado" : `GitLab: ${res.data?.message || res.status}` };
+  return { ok: res.ok, message: res.ok ? "Eliminado" : `GitHub: ${res.data?.message || res.status}` };
 }
 
 // ---------- Imágenes de portada (proxy al repo) ----------
@@ -429,8 +461,8 @@ async function serveImagen(request, env, url) {
   if (!mime) return new Response("Not found", { status: 404 });
 
   const imagePath = `${env.IMG_PATH.replace(/\/+$/, "")}/${name}`;
-  const url2 = `https://gitlab.com/api/v4/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(imagePath)}/raw?ref=${env.DEFAULT_BRANCH}`;
-  const res = await fetch(url2, { headers: glHeaders(env) });
+  const url2 = `https://raw.githubusercontent.com/${ghRepo(env)}/${env.DEFAULT_BRANCH}/${imagePath}`;
+  const res = await fetch(url2, env.GITHUB_TOKEN ? { headers: { Authorization: `Bearer ${env.GITHUB_TOKEN}` } } : {});
   if (!res.ok) return new Response("Not found", { status: 404 });
 
   return new Response(res.body, {
@@ -444,7 +476,7 @@ async function serveImagen(request, env, url) {
 // ---------- Precios (repo geo-graficas-web, archivo canónico) ----------
 // El archivo de precios vive en geo-graficas-web (src/data/prices.json) y es
 // la fuente única de verdad: la web lo muestra, el worker pay lo toma al
-// desplegar y acá se edita. Se usa el mismo GITLAB_TOKEN del repo web.
+// desplegar y acá se edita. Se usa el mismo GITHUB_TOKEN del repo web.
 function pricesFilePath(env) {
   return env.PRICES_PATH || "src/data/prices.json";
 }
@@ -463,8 +495,8 @@ function validPrices(categories) {
 
 async function getPrices(env) {
   const filePath = pricesFilePath(env);
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}/raw?ref=${env.DEFAULT_BRANCH}`);
-  if (!res.ok) return { error: `GitLab: ${res.data?.message || res.status}` };
+  const res = await ghRaw(env, filePath);
+  if (!res.ok) return { error: `GitHub: ${res.data?.message || res.status}` };
   const parsed = typeof res.data === "string" ? safeJson(res.data) : res.data;
   if (!parsed || typeof parsed.categories !== "object" || parsed.categories === null) {
     return { error: "Estructura inesperada en el archivo de precios" };
@@ -479,15 +511,15 @@ function safeJson(text) {
 // ---------- Materias (repo geo-graficas-web, archivo canónico) ----------
 // La lista de materias vive en geo-graficas-web (src/data/materias.json) y es
 // la fuente única de verdad: la web la usa para el filtro y la portada, y acá
-// alimenta el desplegable del editor. Se lee con el mismo GITLAB_TOKEN.
+// alimenta el desplegable del editor. Se lee con el mismo GITHUB_TOKEN.
 function materiasFilePath(env) {
   return env.MATERIAS_PATH || "src/data/materias.json";
 }
 
 async function getMaterias(env) {
   const filePath = materiasFilePath(env);
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}/raw?ref=${env.DEFAULT_BRANCH}`);
-  if (!res.ok) return { error: `GitLab: ${res.data?.message || res.status}` };
+  const res = await ghRaw(env, filePath);
+  if (!res.ok) return { error: `GitHub: ${res.data?.message || res.status}` };
   const parsed = typeof res.data === "string" ? safeJson(res.data) : res.data;
   if (!parsed || !Array.isArray(parsed.materias)) {
     return { error: "Estructura inesperada en el archivo de materias" };
@@ -504,19 +536,19 @@ async function savePrices(env, categories) {
     return { ok: false, message: "Datos de precios inválidos (solo Cat-A..Cat-J con precios numéricos >= 0)" };
   }
   const filePath = pricesFilePath(env);
-  const existing = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}?ref=${env.DEFAULT_BRANCH}`);
-  const isUpdate = existing.ok;
+  const existing = await ghContents(env, filePath);
+  const isUpdate = existing.ok && existing.data?.sha;
   const body = {
+    message: isUpdate ? "Actualizar precios desde panel" : "Crear archivo de precios desde panel",
+    content: toBase64(JSON.stringify({ categories: clean }, null, 2) + "\n"),
     branch: env.DEFAULT_BRANCH,
-    content: JSON.stringify({ categories: clean }, null, 2) + "\n",
-    commit_message: isUpdate ? "Actualizar precios desde panel" : "Crear archivo de precios desde panel",
   };
-  if (isUpdate) body.last_commit_id = existing.data?.last_commit_id;
-  const res = await glFetch(env, `/projects/${env.GITLAB_PROJECT_ID}/repository/files/${encodeURIComponent(filePath)}`, {
-    method: isUpdate ? "PUT" : "POST",
+  if (isUpdate) body.sha = existing.data.sha;
+  const res = await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(filePath)}`, {
+    method: "PUT",
     body: JSON.stringify(body),
   });
-  return { ok: res.ok, message: res.ok ? "Precios actualizados" : `GitLab: ${res.data?.message || res.status}` };
+  return { ok: res.ok, message: res.ok ? "Precios actualizados" : `GitHub: ${res.data?.message || res.status}` };
 }
 
 // ---------- Mensaje al administrador (delegado al worker geo-graficas-pay) ----------

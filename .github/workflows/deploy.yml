@@ -1,0 +1,45 @@
+name: Deploy Worker y GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  deploy-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Deploy Worker
+        run: npx wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+  pages:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generar index estático
+        run: |
+          mkdir -p public
+          sed -e "s|__WORKER_BASE__|https://panel.geograficas.shcdigital.net.ar|g" \
+              -e "s|__SITE_URL__|https://shcdigital.github.io/geo-graficas-web|g" \
+              -e "s|__CLIENTES_URL__|https://clientes.shcdigital.net.ar|g" \
+              src/admin.txt > public/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - name: Deploy Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
