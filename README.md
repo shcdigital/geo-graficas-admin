@@ -107,6 +107,18 @@ El SPA (`src/admin.txt`) usa placeholders que el Worker reemplaza al servir
 - `__SITE_URL__` → botón "Ver sitio".
 - `__CLIENTES_URL__` → botón "← Panel de clientes".
 
+## Desarrollo local
+
+```bash
+cp .dev.vars.example .dev.vars   # completar GITHUB_TOKEN, SHARED_JWT_SECRET, EMAIL_TOKEN
+npm run dev                      # wrangler dev (http://127.0.0.1:8787)
+```
+
+Para probar contra GitHub real sin el token de producción, usá un token
+personal con scope `repo` sobre `shcdigital/geo-graficas-web` en `.dev.vars`
+(`GITHUB_TOKEN`). El `User-Agent` es obligatorio en las llamadas a la API de
+GitHub (sin él, devuelve 403).
+
 ## Migración de cuenta / replicación para otro cliente
 
 Ver [`docs/MIGRACION-CUENTA.md`](../geo-graficas-web/docs/MIGRACION-CUENTA.md)
