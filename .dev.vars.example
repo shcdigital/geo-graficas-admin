@@ -4,13 +4,17 @@
 # Las variables no secretas están en wrangler.toml [vars]; acá solo las que
 # requieren valor local/privado.
 
-# Token de proyecto GitLab (scope api). Debe tener acceso al repo geo-graficas-web
-# (GITLAB_PROJECT_ID) porque el panel lee y escribe cuadernillos, precios y materias.
-GITLAB_TOKEN=
+# Token de GitHub (scope repo) del repo geo-graficas-web
+# (GITHUB_REPO). El panel lee y escribe cuadernillos, precios y materias.
+GITHUB_TOKEN=
 
 # Secret compartido con el Worker SSO de clientes.shcdigital.net.ar.
 # Debe ser IDÉNTICO en ambos Workers o el login SSO rechaza el JWT.
 SHARED_JWT_SECRET=
+
+# Secret compartido con geo-graficas-pay: firma el POST /email.
+# Debe ser IDÉNTICO en ambos Workers.
+EMAIL_TOKEN=
 
 # API key de Resend: vive en el worker geo-graficas-pay (POST /email), no acá.
 # El panel solo configura el destinatario (ADMIN_EMAIL en wrangler.toml) y la URL del worker pay.

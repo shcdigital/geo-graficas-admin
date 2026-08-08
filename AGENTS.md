@@ -1,23 +1,31 @@
 # AGENTS.md — geo-graficas-admin
 
-## Pendientes (para la próxima sesión)
+## Estado (2026-08-08)
 
-- **Deploy del fix de seguridad EMAIL_TOKEN (2026-08-07):**
-  - Se firmó el POST `pay/email` con `Authorization: Bearer EMAIL_TOKEN`.
-  - `sendMensaje` en `src/index.js` exige `env.EMAIL_TOKEN`.
-  - `geo-graficas-pay/src/index.ts` valida el token (constante-time) en `handleEmail`.
-  - **Acción requerida:** setear el MISMO valor de `EMAIL_TOKEN` como secret en ambos workers:
-    - `cd geo-graficas-admin && wrangler secret put EMAIL_TOKEN`
-    - `cd geo-graficas-pay && wrangler secret put EMAIL_TOKEN`
-  - Luego redeploy de ambos workers.
-  - Hasta no hacerlo, el botón "Enviar mensaje" del panel devolverá "EMAIL_TOKEN no configurado".
+- **Migración GitLab -> GitHub COMPLETA.** Todo el contenido (cuadernillos,
+  imágenes, precios, materias) se lee/escribe vía GitHub API en
+  `shcdigital/geo-graficas-web` (`GITHUB_TOKEN`, scope repo).
+- `wrangler.toml`: `GITHUB_REPO=shcdigital/geo-graficas-web`, `SITE_URL` ->
+  `https://shcdigital.github.io/geo-graficas-web`, `PANEL_URL` ->
+  `https://panel.geograficas.shcdigital.net.ar`.
+- Deploy: `.github/workflows/deploy.yml` (job `deploy-worker` con
+  `CLOUDFLARE_API_TOKEN` + job `pages` que genera `index.html` desde
+  `src/admin.txt`). Ambos jobs pasan.
+- Validado en producción: CRUD recursos, imágenes, precios, materias, mensaje/
+  email (EMAIL_TOKEN). Commit de referencia de la migración: `75410b8`.
 
-## Migración GitLab -> GitHub (2026-08-07, en curso)
+## Secrets (Cloudflare, `wrangler secret put`)
 
-- Capa de contenido migrada de GitLab API a GitHub API (`ghFetch`/`ghContents`/`ghRaw`, token `GITHUB_TOKEN`).
-- `wrangler.toml`: `GITHUB_REPO=shcdigital/geo-graficas-web`, `SITE_URL` -> shcdigital.github.io.
-- Validado localmente contra GitHub real: CRUD recursos, imágenes, precios, materias. Commit `75410b8`.
-- [OK] Secret `GITHUB_TOKEN` seteado en Cloudflare (admin worker); `GITLAB_TOKEN`/`GITLAB_PAY_TOKEN` eliminados.
-- [OK] `EMAIL_TOKEN` generado y seteado en workers admin y pay (mismo valor).
-- [OK] `CLOUDFLARE_API_TOKEN` seteado como secret en los 3 repos GitHub; workflow `deploy.yml` pasa (worker + pages).
-- [OK] Worker admin deployado desde GitHub Actions y validado en producción contra GitHub API.
+- `GITHUB_TOKEN` — token scope repo de `shcdigital/geo-graficas-web`.
+- `SHARED_JWT_SECRET` — idéntico al Worker SSO de clientes.shcdigital.net.ar.
+- `EMAIL_TOKEN` — compartido con geo-graficas-pay (firma `POST /email`).
+
+> `GITLAB_TOKEN`/`GITLAB_PAY_TOKEN` fueron eliminados (ya no se usan).
+
+## Puntos de atención
+
+- El botón "Enviar mensaje" delega a `geo-graficas-pay` (`POST /email`) con
+  `Authorization: Bearer EMAIL_TOKEN`; el pay valida en const-time.
+- `User-Agent` es obligatorio en `ghHeaders` (GitHub devuelve 403 sin él).
+- El worker `geo-graficas-pay` NO es fuente de precios ni materias; los lee del
+  repo web (GitHub). Su CI baja `prices.json` de `raw.githubusercontent.com`.
