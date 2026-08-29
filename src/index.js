@@ -223,8 +223,10 @@ async function handleApi(request, env, ctx, url) {
     return json(await getRecurso(env, slug));
   }
   if (resource === "recurso" && (request.method === "POST" || request.method === "PUT")) {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
     if (!body || !validSlug(body.slug)) return json({ error: "Slug inválido" }, 400);
+    const err = validateRecurso(body);
+    if (err) return json({ error: `Contenido inválido: ${err}` }, 400);
     const res = await saveRecurso(env, body);
     return json(res, res.ok ? 200 : 400);
   }
@@ -236,15 +238,18 @@ async function handleApi(request, env, ctx, url) {
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "imagen" && request.method === "POST") {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
     if (!body || !validSlug(body.slug) || !body.base64) return json({ error: "Faltan slug o base64" }, 400);
     const ext = String(body.ext || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     if (!IMG_ALLOWED_EXT.includes(ext)) return json({ error: "Formato de imagen no permitido (png/jpg/webp/gif)" }, 400);
+    if (typeof body.base64 !== "string" || body.base64.length > IMG_MAX_BASE64) {
+      return json({ error: `Imagen demasiado grande (máximo ${Math.round(IMG_MAX_BASE64 / 1.37 / 1024 / 1024)} MB)` }, 400);
+    }
     const res = await uploadImagen(env, { ...body, ext });
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "imagen" && request.method === "DELETE") {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
     if (!body || !validSlug(body.slug)) return json({ error: "Falta slug" }, 400);
     const ext = String(body.ext || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     if (ext && !IMG_ALLOWED_EXT.includes(ext)) return json({ error: "Formato inválido" }, 400);
@@ -254,9 +259,11 @@ async function handleApi(request, env, ctx, url) {
   if (resource === "prices" && request.method === "GET") return json(await getPrices(env));
   if (resource === "prices" && request.method === "PUT") {
     const body = await request.json().catch(() => null);
-    if (!body || typeof body.categories !== "object" || body.categories === null) {
+    if (!body || typeof body.categories !== "object" || body.categories === null || Array.isArray(body.categories)) {
       return json({ error: "Falta categorías" }, 400);
     }
+    const err = validatePrices(body.categories);
+    if (err) return json({ error: `Precios inválidos: ${err}` }, 400);
     const res = await savePrices(env, body.categories);
     return json(res, res.ok ? 200 : 400);
   }
@@ -344,6 +351,31 @@ async function saveRecurso(env, { slug, content, message }) {
 }
 
 const IMG_ALLOWED_EXT = ["png", "jpg", "jpeg", "webp", "gif"];
+
+const RECURSO_MAX_CHARS = 200_000;
+const IMG_MAX_BASE64 = 4_000_000;
+const PRICES_MAX_ENTRIES = 60;
+const PRICES_MAX_VALUE = 1_000_000;
+const MENSAJE_MAX_ASUNTO = 200;
+const MENSAJE_MAX_TEXT = 5_000;
+
+function validateRecurso(body) {
+  if (typeof body.content !== "string" || !body.content.trim()) return "contenido requerido";
+  if (body.content.length > RECURSO_MAX_CHARS) return `contenido demasiado grande (máximo ${RECURSO_MAX_CHARS} caracteres)`;
+  if (body.message !== undefined && (typeof body.message !== "string" || body.message.length > 200)) return "mensaje de commit inválido (máximo 200 caracteres)";
+  return null;
+}
+
+function validatePrices(categories) {
+  const keys = Object.keys(categories);
+  if (keys.length === 0) return "categories vacío";
+  if (keys.length > PRICES_MAX_ENTRIES) return `máximo ${PRICES_MAX_ENTRIES} entradas`;
+  for (const k of keys) {
+    const v = categories[k];
+    if (typeof v !== "number" || !Number.isFinite(v) || v < 0 || v > PRICES_MAX_VALUE) return `"${k}" debe ser un número entre 0 y ${PRICES_MAX_VALUE}`;
+  }
+  return null;
+}
 
 async function uploadImagen(env, { slug, ext, base64, message }) {
   const imagePath = `${env.IMG_PATH}/${slug}.${ext}`;
@@ -529,6 +561,8 @@ async function sendMensaje(env, session, body) {
   const asunto = String((body && body.asunto) || "").trim();
   const mensaje = String((body && body.mensaje) || "").trim();
   if (!asunto || !mensaje) return { ok: false, message: "Faltan asunto y mensaje" };
+  if (asunto.length > MENSAJE_MAX_ASUNTO) return { ok: false, message: "Asunto demasiado largo" };
+  if (mensaje.length > MENSAJE_MAX_TEXT) return { ok: false, message: "Mensaje demasiado largo" };
 
   const to = env.ADMIN_EMAIL || "shcdigitalsolutions@gmail.com";
   const payUrl = (env.PAY_URL || "https://geo-graficas-pay.pablo-berthold.workers.dev").replace(/\/+$/, "");

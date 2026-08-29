@@ -176,6 +176,52 @@ describe("Sesión /auth/me geo-graficas", () => {
   });
 });
 
+describe("Validación de contenido (C-5) geo-graficas", () => {
+  const COOKIE = "gg_session=s1";
+
+  async function withSession(env) {
+    await env.SESSIONS.put("session:s1", JSON.stringify({ email: "x@y.z", name: "X" }));
+    return env;
+  }
+
+  it.each([
+    ["/api/recurso", "PUT", { slug: "cuaderno-1", content: "" }, "contenido requerido"],
+    ["/api/recurso", "PUT", { slug: "cuaderno-1", content: "a".repeat(200_001) }, "demasiado grande"],
+    ["/api/recurso", "PUT", { slug: "cuaderno-1", content: "ok", message: "m".repeat(201) }, "mensaje de commit inválido"],
+    ["/api/imagen", "POST", { slug: "cuaderno-1", base64: "a".repeat(4_000_001), ext: "png" }, "demasiado grande"],
+    ["/api/prices", "PUT", { categories: { "Cat-A": "caro" } }, "debe ser un número"],
+    ["/api/prices", "PUT", { categories: { "Cat-A": -5 } }, "entre 0 y"],
+    ["/api/prices", "PUT", { categories: {} }, "vacío"],
+    ["/api/prices", "PUT", { categories: Object.fromEntries(Array.from({ length: 61 }, (_, i) => [`C${i}`, 1])) }, "máximo 60"],
+  ])("%s %s %j → 400", async (path, method, body, expected) => {
+    const env = await withSession(makeEnv());
+    const res = await worker.fetch(req(path, { method, origin: PANEL, body, cookie: COOKIE }), env, ctx);
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.error).toContain(expected);
+  });
+
+  it("body JSON malformado → 400 (no 500)", async () => {
+    const env = await withSession(makeEnv());
+    const request = new Request(PANEL + "/api/recurso", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json", "Cookie": COOKIE, "Origin": PANEL },
+      body: "{invalid",
+    });
+    const res = await worker.fetch(request, env, ctx);
+    expect(res.status).toBe(400);
+  });
+
+  it("prices válido pasa la validación (mock GitHub)", async () => {
+    const env = await withSession(makeEnv());
+    const mock = vi.fn(async () => ({ ok: true, status: 200, text: async () => JSON.stringify({ sha: "s" }) }));
+    vi.stubGlobal("fetch", mock);
+    const res = await worker.fetch(req("/api/prices", { method: "PUT", origin: PANEL, cookie: COOKIE, body: { categories: { "Cat-A": 999 } } }), env, ctx);
+    expect(res.status).toBe(200);
+    expect((await res.json()).ok).toBe(true);
+  });
+});
+
 describe("Render geo-graficas", () => {
   it("GET / sirve SPA con placeholders y headers de seguridad", async () => {
     const res = await worker.fetch(new Request(PANEL + "/"), makeEnv(), ctx);
