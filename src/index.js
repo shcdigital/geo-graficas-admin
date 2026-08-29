@@ -10,16 +10,17 @@
 // SHARED_JWT_SECRET (idéntico al del Worker SSO de clientes)
 // GITHUB_TOKEN (token con scope repo del repo web) / GITHUB_REPO
 
-// Login local: hash PBKDF2-SHA256 (100000 iter) de la contraseña + salt.
-// SOLO está el hash, nunca la contraseña en claro.
-const LOCAL_USER = "admin";
-const LOCAL_SALT_B64 = "j+fjQHoDnbMq0a5Dlhrj6A==";
-const LOCAL_HASH_B64 = "UDJaznYt9Pv/+8Zbo1VzWhJ7xQVC0kX0uk6t0TxAZz0=";
-
 import adminHtml from "./admin.txt?raw";
 
-const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
-const HTML_HEADERS = { "Content-Type": "text/html; charset=utf-8" };
+const SECURITY_HEADERS = {
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+  "X-Content-Type-Options": "nosniff",
+  "Referrer-Policy": "no-referrer",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+  "X-Robots-Tag": "noindex, nofollow",
+};
+const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8", ...SECURITY_HEADERS };
+const HTML_HEADERS = { "Content-Type": "text/html; charset=utf-8", ...SECURITY_HEADERS };
 
 export default {
   async fetch(request, env, ctx) {
@@ -37,17 +38,12 @@ export default {
 
     // SSO: el Worker de clientes (clientes.shcdigital.net.ar) valida el login
     // y redirige acá con un JWT firmado. Este Worker solo valida y abre sesión.
-    if (url.pathname === "/auth/sso" && request.method === "GET") {
+    if (url.pathname === "/auth/sso" && (request.method === "GET" || request.method === "POST")) {
       return await ssoLogin(request, env, ctx);
     }
 
-    if (url.pathname === "/auth/logout") return await logout(request, env, origin);
+    if (url.pathname === "/auth/logout" && request.method === "POST") return await logout(request, env, url);
     if (url.pathname === "/auth/me") return corsWrap(await me(request, env), env, origin);
-
-    // Login local
-    if (url.pathname === "/auth/login-local" && request.method === "POST") {
-      return corsWrap(await loginLocal(request, env, origin), env, origin);
-    }
 
     // Imágenes de portada: se sirven desde el repo geo-graficas-web
     // (public/img/recursos/...) para que el panel muestre la portada real
@@ -84,76 +80,28 @@ function corsWrap(res, env, origin) {
   return r;
 }
 
-// ---------- Login ----------
-const LOGIN_MAX = 5;              // intentos fallidos permitidos
-const LOGIN_WINDOW_SEC = 300;     // ventana de 5 minutos
-
-async function loginRateLimit(env, request) {
-  if (!env.SESSIONS) return null;
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  const key = `ratelimit:${ip}`;
-  const raw = await env.SESSIONS.get(key);
-  const count = raw ? Number(raw) : 0;
-  if (count >= LOGIN_MAX) {
-    return json({ error: "Demasiados intentos. Probá de nuevo en unos minutos." }, 429);
-  }
-  return null;
+function normOrigin(u) {
+  return (u || "").replace(/\/+$/, "").toLowerCase();
 }
 
-async function recordLoginFail(env, request) {
-  if (!env.SESSIONS) return;
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  const key = `ratelimit:${ip}`;
-  const raw = await env.SESSIONS.get(key);
-  const count = raw ? Number(raw) : 0;
-  await env.SESSIONS.put(key, String(count + 1), { expirationTtl: LOGIN_WINDOW_SEC });
-}
-
-async function clearLoginFails(env, request) {
-  if (!env.SESSIONS) return;
-  const ip = request.headers.get("CF-Connecting-IP") || "unknown";
-  await env.SESSIONS.delete(`ratelimit:${ip}`);
-}
-
-async function loginLocal(request, env, origin) {
-  const limited = await loginRateLimit(env, request);
-  if (limited) return limited;
-  let body;
-  try { body = await request.json(); } catch { return json({ error: "Body inválido" }, 400); }
-  const user = String(body.user || "").trim();
-  const pass = String(body.pass || "");
-
-  if (user !== LOCAL_USER) { await recordLoginFail(env, request); return json({ error: "Usuario o contraseña incorrectos" }, 401); }
-
-  const salt = Uint8Array.from(atob(LOCAL_SALT_B64), (c) => c.charCodeAt(0));
-  const expected = Uint8Array.from(atob(LOCAL_HASH_B64), (c) => c.charCodeAt(0));
-  const derived = await pbkdf2(pass, salt);
-  if (!constantTimeEqual(derived, expected)) { await recordLoginFail(env, request); return json({ error: "Usuario o contraseña incorrectos" }, 401); }
-
-  await clearLoginFails(env, request);
-  return await makeSession(env, { email: `${LOCAL_USER}@local`, name: "Administrador local" }, origin);
-}
-
-function originOf(request) {
-  return request.headers.get("Origin") || new URL(request.url).origin;
-}
-
-async function makeSession(env, user, origin) {
-  const sessionId = crypto.randomUUID();
-  const cross = env.SITE_URL && (!origin || origin.replace(/\/+$/, "") !== (env.SITE_URL || "").replace(/\/+$/, ""));
-  const sameSite = cross ? "None" : "Lax";
-  const secure = cross ? "; Secure" : "";
-  const cookie = `gg_session=${sessionId}; HttpOnly; Path=/; SameSite=${sameSite}${secure}; Max-Age=${60 * 60 * 12}`;
-  // Persistir la sesión en KV, igual que hace el SSO. Sin esto /auth/me nunca
-  // encuentra la sesión y el login local no entra.
-  await env.SESSIONS.put(`session:${sessionId}`, JSON.stringify(user), { expirationTtl: 60 * 60 * 12 });
-  return new Response(
-    `<!doctype html><html><body><script>window.location.href = "/";</script></body></html>`,
-    { headers: { "Content-Type": "text/html", "Set-Cookie": cookie } }
+function trustedOrigin(request, url, env) {
+  const origin = normOrigin(request.headers.get("Origin"));
+  if (!origin) return false;
+  return (
+    origin === normOrigin(url.origin) ||
+    origin === normOrigin(env.PANEL_URL) ||
+    origin === normOrigin(env.SITE_URL)
   );
 }
 
-async function logout(request, env, origin) {
+function isJsonContent(request) {
+  const ct = (request.headers.get("Content-Type") || "").split(";")[0].trim().toLowerCase();
+  return ct === "application/json";
+}
+
+async function logout(request, env, url) {
+  if (!trustedOrigin(request, url, env)) return json({ error: "Origen no permitido" }, 403);
+  const origin = request.headers.get("Origin") || "";
   const sessionId = getSession(request);
   if (sessionId) await env.SESSIONS.delete(`session:${sessionId}`);
   const cross = env.SITE_URL && origin && origin.replace(/\/+$/, "") !== (env.SITE_URL || "").replace(/\/+$/, "");
@@ -178,8 +126,14 @@ async function me(request, env) {
 // Quién lo emite: el Worker SSO (SHC Digital Clientes) con SHARED_JWT_SECRET.
 // Este endpoint valida firma + exp + tenant y abre la sesión interna del panel.
 async function ssoLogin(request, env, ctx) {
-  const token = new URL(request.url).searchParams.get("token");
-  if (!token) return new Response("Falta token", { status: 400, headers: HTML_HEADERS });
+  let token = null;
+  if (request.method === "POST") {
+    const form = await request.formData().catch(() => null);
+    token = form ? form.get("token") : null;
+  } else {
+    token = new URL(request.url).searchParams.get("token");
+  }
+  if (!token || typeof token !== "string") return new Response("Falta token", { status: 400, headers: HTML_HEADERS });
 
   const secret = env.SHARED_JWT_SECRET;
   if (!secret) return new Response("SSO no configurado (falta SHARED_JWT_SECRET)", { status: 503, headers: HTML_HEADERS });
@@ -198,6 +152,20 @@ async function ssoLogin(request, env, ctx) {
   const expectedAud = (env.PANEL_URL || new URL(request.url).origin).replace(/\/+$/, "");
   if (expectedAud && payload.aud && payload.aud.replace(/\/+$/, "") !== expectedAud) {
     return new Response("Token no emitido para este panel", { status: 403, headers: HTML_HEADERS });
+  }
+
+  // Rechazar tokens emitidos por otro emisor (claim "iss" del issuer SSO)
+  if (env.CLIENTES_URL && payload.iss && normOrigin(payload.iss) !== normOrigin(env.CLIENTES_URL)) {
+    return new Response("Token no emitido por el SSO", { status: 403, headers: HTML_HEADERS });
+  }
+
+  // Consumo único del token (claim "jti"): mitiga replay durante su ventana de validez
+  if (payload.jti) {
+    const jtiKey = `sso:jti:${payload.jti}`;
+    if (await env.SESSIONS.get(jtiKey)) {
+      return new Response("Token inválido o expirado", { status: 401, headers: HTML_HEADERS });
+    }
+    await env.SESSIONS.put(jtiKey, "1", { expirationTtl: 330 });
   }
 
   const sessionId = crypto.randomUUID();
@@ -233,11 +201,14 @@ function b64urlDecode(s) {
 }
 
 function sessionCookie(sessionId) {
-  return `gg_session=${sessionId}; HttpOnly; Path=/; SameSite=Lax; Max-Age=${60 * 60 * 12}`;
+  return `gg_session=${sessionId}; HttpOnly; Path=/; SameSite=Lax; Secure; Max-Age=${60 * 60 * 12}`;
 }
 
 // ---------- API ----------
 async function handleApi(request, env, ctx, url) {
+  if (request.method !== "GET" && (!trustedOrigin(request, url, env) || !isJsonContent(request))) {
+    return json({ error: "Origen no permitido" }, 403);
+  }
   const sessionId = getSession(request);
   const session = sessionId ? JSON.parse((await env.SESSIONS.get(`session:${sessionId}`)) || "null") : null;
   if (!session) return json({ error: "No autenticado" }, 401);
@@ -601,22 +572,7 @@ function validSlug(s) {
   return typeof s === "string" && SLUG_RE.test(s);
 }
 
-async function pbkdf2(password, salt) {
-  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveBits"]);
-  const bits = await crypto.subtle.deriveBits(
-    { name: "PBKDF2", salt, iterations: 100000, hash: "SHA-256" },
-    key,
-    256
-  );
-  return new Uint8Array(bits);
-}
 
-function constantTimeEqual(a, b) {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i];
-  return diff === 0;
-}
 
 function renderAdmin(env, url) {
   const workerBase = url.origin;

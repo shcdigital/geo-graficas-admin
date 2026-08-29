@@ -120,11 +120,10 @@
   <div class="card" id="loginCard">
     <h2>Acceso restringido</h2>
     <p class="muted">El acceso se gestiona desde el panel de clientes de SHC Digital.</p>
-    <div class="divider">o ingreso local (prueba)</div>
-    <div class="login-form">
-      <div class="field"><label>Usuario</label><input type="text" id="locUser" autocomplete="username" /></div>
-      <div class="field"><label>Contraseña</label><input type="password" id="locPass" autocomplete="current-password" /></div>
-      <div class="row"><button class="btn btn-ghost" id="btnLocal" style="width:100%">Ingresar</button></div>
+    <div class="row" style="justify-content:center;margin-top:1rem;margin-bottom:.75rem">
+      <a class="btn btn-primary" id="btnSSOLogin" href="https://clientes.shcdigital.net.ar/auth/sso/geo-graficas" style="min-width:280px">
+        Ingresar con SSO
+      </a>
     </div>
   </div>
 
@@ -522,17 +521,6 @@ async function init(){
   }
 }
 
-async function loginLocal(){
-  const user=$("locUser").value.trim();
-  const pass=$("locPass").value;
-  if(!user||!pass){toast("Completá usuario y contraseña");return;}
-  $("btnLocal").disabled=true;
-  try{
-    const d=await api("/auth/login-local",{method:"POST",body:JSON.stringify({user,pass})});
-    toast(d.message||"Ingresaste");init();
-  }catch(e){toast(e.message);}finally{$("btnLocal").disabled=false;}
-}
-
 async function cargar(){
   const data=await api("/api/recursos");
   const el=$("lista");
@@ -872,7 +860,7 @@ $("btnGuardarPrecios").addEventListener("click",guardarPrecios);
 $("precio").addEventListener("change",updatePrecioHint);
 $("btnSSO").addEventListener("click",()=>location.href=CLIENTES_URL);
 $("btnCerrar").addEventListener("click",()=>{
-  try{fetch(WB+"/auth/logout",{credentials:"include"});}catch(e){}
+  try{fetch(WB+"/auth/logout",{method:"POST",credentials:"include"});}catch(e){}
   location.href=CLIENTES_URL+"/auth/logout";
 });
 $("btnSubir").addEventListener("click",subir);
@@ -921,8 +909,6 @@ async function enviarMensaje(){
   finally{btn.disabled=false;btn.textContent="Enviar";}
 }
 
-$("btnLocal").addEventListener("click",loginLocal);
-$("locPass").addEventListener("keydown",(e)=>{if(e.key==="Enter")loginLocal();});
 ["emoji","materia","destacado"].forEach(id=>$(id).addEventListener("change",updatePreview));
 $("materia").addEventListener("change",syncEmojiFromMateria);
 

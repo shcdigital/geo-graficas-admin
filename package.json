@@ -6,6 +6,7 @@
   "scripts": {
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
+    "test": "vitest run",
     "kv:session": "wrangler kv namespace create SESSIONS"
   },
   "keywords": [],
@@ -13,6 +14,7 @@
   "license": "ISC",
   "private": true,
   "devDependencies": {
+    "vitest": "^4.1.11",
     "wrangler": "^4.119.0"
   }
 }
