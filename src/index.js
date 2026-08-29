@@ -212,6 +212,7 @@ async function handleApi(request, env, ctx, url) {
   const sessionId = getSession(request);
   const session = sessionId ? JSON.parse((await env.SESSIONS.get(`session:${sessionId}`)) || "null") : null;
   if (!session) return json({ error: "No autenticado" }, 401);
+  const actor = session.email || session.name || "desconocido";
 
   const [_, , resource] = url.pathname.split("/");
 
@@ -227,14 +228,16 @@ async function handleApi(request, env, ctx, url) {
     if (!body || !validSlug(body.slug)) return json({ error: "Slug inválido" }, 400);
     const err = validateRecurso(body);
     if (err) return json({ error: `Contenido inválido: ${err}` }, 400);
-    const res = await saveRecurso(env, body);
+    const res = await saveRecurso(env, { ...body, actor });
+    console.log(JSON.stringify({ event: "mutation", resource, actor, result: res && res.ok ? "ok" : "error" }));
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "recurso" && request.method === "DELETE") {
     let body = {};
     try { body = await request.json(); } catch {}
     if (!body || !validSlug(body.slug)) return json({ error: "Slug inválido" }, 400);
-    const res = await deleteRecurso(env, body);
+    const res = await deleteRecurso(env, { ...body, actor });
+    console.log(JSON.stringify({ event: "mutation", resource, actor, result: res && res.ok ? "ok" : "error" }));
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "imagen" && request.method === "POST") {
@@ -245,7 +248,8 @@ async function handleApi(request, env, ctx, url) {
     if (typeof body.base64 !== "string" || body.base64.length > IMG_MAX_BASE64) {
       return json({ error: `Imagen demasiado grande (máximo ${Math.round(IMG_MAX_BASE64 / 1.37 / 1024 / 1024)} MB)` }, 400);
     }
-    const res = await uploadImagen(env, { ...body, ext });
+    const res = await uploadImagen(env, { ...body, ext, actor });
+    console.log(JSON.stringify({ event: "mutation", resource, actor, result: res && res.ok ? "ok" : "error" }));
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "imagen" && request.method === "DELETE") {
@@ -253,7 +257,8 @@ async function handleApi(request, env, ctx, url) {
     if (!body || !validSlug(body.slug)) return json({ error: "Falta slug" }, 400);
     const ext = String(body.ext || "").toLowerCase().replace(/[^a-z0-9]/g, "");
     if (ext && !IMG_ALLOWED_EXT.includes(ext)) return json({ error: "Formato inválido" }, 400);
-    const res = await deleteImagen(env, { slug: body.slug, ext });
+    const res = await deleteImagen(env, { slug: body.slug, ext, actor });
+    console.log(JSON.stringify({ event: "mutation", resource, actor, result: res && res.ok ? "ok" : "error" }));
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "prices" && request.method === "GET") return json(await getPrices(env));
@@ -264,13 +269,15 @@ async function handleApi(request, env, ctx, url) {
     }
     const err = validatePrices(body.categories);
     if (err) return json({ error: `Precios inválidos: ${err}` }, 400);
-    const res = await savePrices(env, body.categories);
+    const res = await savePrices(env, body.categories, actor);
+    console.log(JSON.stringify({ event: "mutation", resource, actor, result: res && res.ok ? "ok" : "error" }));
     return json(res, res.ok ? 200 : 400);
   }
   if (resource === "materias" && request.method === "GET") return json(await getMaterias(env));
   if (resource === "mensaje" && request.method === "POST") {
     const body = await request.json().catch(() => null);
     const res = await sendMensaje(env, session, body);
+    console.log(JSON.stringify({ event: "mutation", resource, actor, result: res && res.ok ? "ok" : "error" }));
     return json(res, res.ok ? 200 : 400);
   }
   return json({ error: "Ruta no encontrada" }, 404);
@@ -331,13 +338,13 @@ async function getRecurso(env, slug) {
   return { slug, content: res.data };
 }
 
-async function saveRecurso(env, { slug, content, message }) {
+async function saveRecurso(env, { slug, content, message, actor }) {
   const filePath = `${env.CONTENT_PATH}/${slug}.md`;
   const existing = await ghContents(env, filePath);
   const isUpdate = existing.ok && existing.data?.sha;
 
   const body = {
-    message: message || (isUpdate ? `Actualizar ${slug}.md` : `Crear ${slug}.md`),
+    message: (message ? String(message).slice(0, 150) : (isUpdate ? `Actualizar ${slug}.md` : `Crear ${slug}.md`)) + authorSuffix(actor),
     content: toBase64(content),
     branch: env.DEFAULT_BRANCH,
   };
@@ -377,13 +384,13 @@ function validatePrices(categories) {
   return null;
 }
 
-async function uploadImagen(env, { slug, ext, base64, message }) {
+async function uploadImagen(env, { slug, ext, base64, message, actor }) {
   const imagePath = `${env.IMG_PATH}/${slug}.${ext}`;
   const existing = await ghContents(env, imagePath);
   const isUpdate = existing.ok && existing.data?.sha;
 
   const body = {
-    message: message || (isUpdate ? `Actualizar imagen ${slug}.${ext}` : `Crear imagen ${slug}.${ext}`),
+    message: (message ? String(message).slice(0, 150) : (isUpdate ? `Actualizar imagen ${slug}.${ext}` : `Crear imagen ${slug}.${ext}`)) + authorSuffix(actor),
     content: base64,
     branch: env.DEFAULT_BRANCH,
   };
@@ -400,7 +407,7 @@ async function uploadImagen(env, { slug, ext, base64, message }) {
   };
 }
 
-async function deleteImagen(env, { slug, ext }) {
+async function deleteImagen(env, { slug, ext, actor }) {
   const rel = ext
     ? `${env.IMG_PATH.replace(/^\/+/, "")}/${slug}.${ext}`
     : `${env.IMG_PATH.replace(/^\/+/, "")}/${slug}`;
@@ -409,12 +416,12 @@ async function deleteImagen(env, { slug, ext }) {
   if (!existing.ok || !existing.data?.sha) return { ok: false, message: "Imagen no encontrada" };
   const res = await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(imagePath)}`, {
     method: "DELETE",
-    body: JSON.stringify({ message: `Eliminar imagen de ${slug}`, sha: existing.data.sha, branch: env.DEFAULT_BRANCH }),
+    body: JSON.stringify({ message: `Eliminar imagen de ${slug}` + authorSuffix(actor), sha: existing.data.sha, branch: env.DEFAULT_BRANCH }),
   });
   return { ok: res.ok, message: res.ok ? "Imagen eliminada" : `GitHub: ${res.data?.message || res.status}` };
 }
 
-async function deleteRecurso(env, { slug, message }) {
+async function deleteRecurso(env, { slug, message, actor }) {
   const filePath = `${env.CONTENT_PATH}/${slug}.md`;
   const md = await ghRaw(env, filePath);
   if (md.ok && typeof md.data === "string") {
@@ -426,7 +433,7 @@ async function deleteRecurso(env, { slug, message }) {
       if (imgExisting.ok && imgExisting.data?.sha) {
         await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(imgPath)}`, {
           method: "DELETE",
-          body: JSON.stringify({ message: `Eliminar imagen de ${slug}`, sha: imgExisting.data.sha, branch: env.DEFAULT_BRANCH }),
+          body: JSON.stringify({ message: `Eliminar imagen de ${slug}` + authorSuffix(actor), sha: imgExisting.data.sha, branch: env.DEFAULT_BRANCH }),
         });
       }
     }
@@ -435,7 +442,7 @@ async function deleteRecurso(env, { slug, message }) {
   if (!existing.ok || !existing.data?.sha) return { ok: false, message: "Recurso no encontrado" };
   const res = await ghFetch(env, `/repos/${ghRepo(env)}/contents/${encodeURIComponent(filePath)}`, {
     method: "DELETE",
-    body: JSON.stringify({ message: message || `Eliminar ${slug}.md`, sha: existing.data.sha, branch: env.DEFAULT_BRANCH }),
+    body: JSON.stringify({ message: ((message ? String(message).slice(0, 150) : `Eliminar ${slug}.md`)) + authorSuffix(actor), sha: existing.data.sha, branch: env.DEFAULT_BRANCH }),
   });
   return { ok: res.ok, message: res.ok ? "Eliminado" : `GitHub: ${res.data?.message || res.status}` };
 }
@@ -533,7 +540,7 @@ async function getMaterias(env) {
   return { materias };
 }
 
-async function savePrices(env, categories) {
+async function savePrices(env, categories, actor) {
   const clean = validPrices(categories);
   if (!clean) {
     return { ok: false, message: "Datos de precios inválidos (solo Cat-A..Cat-J con precios numéricos >= 0)" };
@@ -542,7 +549,7 @@ async function savePrices(env, categories) {
   const existing = await ghContents(env, filePath);
   const isUpdate = existing.ok && existing.data?.sha;
   const body = {
-    message: isUpdate ? "Actualizar precios desde panel" : "Crear archivo de precios desde panel",
+    message: (isUpdate ? "Actualizar precios desde panel" : "Crear archivo de precios desde panel") + authorSuffix(actor),
     content: toBase64(JSON.stringify({ categories: clean }, null, 2) + "\n"),
     branch: env.DEFAULT_BRANCH,
   };
@@ -604,6 +611,10 @@ function json(data, status = 200) {
 const SLUG_RE = /^[a-z0-9-]{1,80}$/;
 function validSlug(s) {
   return typeof s === "string" && SLUG_RE.test(s);
+}
+
+function authorSuffix(actor) {
+  return actor ? ` (por ${actor})` : "";
 }
 
 

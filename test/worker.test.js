@@ -219,6 +219,24 @@ describe("Validación de contenido (C-5) geo-graficas", () => {
     const res = await worker.fetch(req("/api/prices", { method: "PUT", origin: PANEL, cookie: COOKIE, body: { categories: { "Cat-A": 999 } } }), env, ctx);
     expect(res.status).toBe(200);
     expect((await res.json()).ok).toBe(true);
+    const putCall = mock.mock.calls.find(([, o]) => o.method === "PUT");
+    const sent = JSON.parse(putCall[1].body);
+    expect(sent.message).toContain("(por x@y.z)");
+  });
+
+  it("recurso PUT commitea con autor del usuario logueado", async () => {
+    const env = await withSession(makeEnv());
+    const mock = vi.fn(async (url, opts = {}) => {
+      if ((opts.method ?? "GET") === "PUT") return { ok: true, status: 200, text: async () => "{}" };
+      return { ok: false, status: 404, text: async () => JSON.stringify({ message: "Not Found" }) };
+    });
+    vi.stubGlobal("fetch", mock);
+    const res = await worker.fetch(req("/api/recurso", { method: "PUT", origin: PANEL, cookie: COOKIE, body: { slug: "cuaderno-1", content: "# Hola" } }), env, ctx);
+    expect(res.status).toBe(200);
+    const putCall = mock.mock.calls.find(([, o]) => o.method === "PUT");
+    const sent = JSON.parse(putCall[1].body);
+    expect(sent.message).toContain("Crear cuaderno-1.md");
+    expect(sent.message).toContain("(por x@y.z)");
   });
 });
 
