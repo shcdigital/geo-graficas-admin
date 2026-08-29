@@ -101,7 +101,7 @@
 </style>
 </head>
 <body>
-<div class="shc-banner">Coding by&nbsp;SHC<span class="dot">.</span>DIGITAL</div>
+<div class="shc-banner">SHC<span class="dot">.</span>DIGITAL</div>
 
 <div class="wrap">
   <div class="top">
