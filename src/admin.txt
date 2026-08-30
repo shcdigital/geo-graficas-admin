@@ -19,11 +19,11 @@
     position:fixed;top:0;left:0;right:0;z-index:100;
     display:flex;align-items:center;justify-content:center;gap:.5rem;
     padding:clamp(.9rem,2.5vw,1.7rem) 1rem;
-    background:#000;color:#fff;font-weight:800;
+    background:#0f0e0c;color:#fff;font-weight:800;
     font-size:clamp(1rem,4.2vw,2.55rem);letter-spacing:.12em;
     text-transform:uppercase;text-align:center;white-space:nowrap;font-family:Arial,sans-serif;
   }
-  .shc-banner .dot{color:#f00}
+  .shc-banner .dot{color:#e8321a}
   .wrap{max-width:1020px;margin:0 auto;padding:1.5rem clamp(1rem,4vw,2rem)}
   .top{display:flex;justify-content:space-between;align-items:center;gap:1rem;flex-wrap:wrap;margin-bottom:1rem}
   .top h1{background:var(--gradient);-webkit-background-clip:text;background-clip:text;color:transparent;margin:0;font-size:1.6rem}
