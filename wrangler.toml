@@ -16,7 +16,7 @@ id = "6ce05e2073b94d0b8e011610d30c92d2"
 # Variables de entorno (no secretas)
 [vars]
 APP_NAME = "Geo.Gráficas Admin"
-SITE_URL = "https://shcdigital.github.io/geo-graficas-web"
+SITE_URL = "https://geograficas.shcdigital.net.ar"
 # Base del panel de clientes (SSO)
 CLIENTES_URL = "https://clientes.shcdigital.net.ar"
 # URL pública de este panel; debe coincidir con el "aud" (admin_url) que firma el SSO
